@@ -1,0 +1,57 @@
+import dayjs from 'dayjs';
+import type { CachedData } from '../types/weather';
+
+const CACHE_KEY = 'weather_cache';
+const WINDOW_HOURS = 6;
+
+/** 取得當前所屬的 6hr 視窗起點 (UTC+8)
+ *  視窗: 00:00, 06:00, 12:00, 18:00
+ */
+export function getCurrentWindowStart(now = dayjs()): dayjs.Dayjs {
+  const h = now.hour();
+  const windowH = Math.floor(h / WINDOW_HOURS) * WINDOW_HOURS;
+  return now.startOf('day').add(windowH, 'hour');
+}
+
+/** 取得當前視窗的結束時間 */
+export function getCurrentWindowEnd(now = dayjs()): dayjs.Dayjs {
+  return getCurrentWindowStart(now).add(WINDOW_HOURS, 'hour');
+}
+
+/** 讀取 localStorage 快取 */
+export function readCache(): CachedData | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as CachedData;
+  } catch {
+    return null;
+  }
+}
+
+/** 寫入 localStorage 快取 */
+export function writeCache(data: CachedData): void {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+}
+
+/** 清除快取 */
+export function clearCache(): void {
+  localStorage.removeItem(CACHE_KEY);
+}
+
+/**
+ * 判斷快取是否仍在目前 6hr 視窗內有效
+ * fetchedAt 要在 [windowStart, windowEnd) 之間才算有效
+ */
+export function isCacheValid(cache: CachedData, now = dayjs()): boolean {
+  const windowStart = getCurrentWindowStart(now);
+  const windowEnd = getCurrentWindowEnd(now);
+  const fetchedAt = dayjs(cache.fetchedAt);
+  return fetchedAt.isAfter(windowStart) && fetchedAt.isBefore(windowEnd);
+}
+
+/** 計算距下一個 6hr 視窗開始的毫秒數 */
+export function msUntilNextWindow(now = dayjs()): number {
+  const nextStart = getCurrentWindowEnd(now);
+  return nextStart.diff(now);
+}

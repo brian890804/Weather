@@ -1,8 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import AirIcon from '@mui/icons-material/Air';
 import type { WeatherPeriod } from '../../types/weather';
-import { beaufortLabel } from '../../utils/weatherUtils';
+import { beaufortLabel, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
@@ -21,7 +20,7 @@ function windDegree(dir: string): number {
   return map[dir] ?? 0;
 }
 
-function WindCompass({ direction, size = 56 }: { direction: string; size?: number }) {
+function WindCompass({ direction, size = 80 }: { direction: string; size?: number }) {
   const deg = windDegree(direction);
   return (
     <Box
@@ -29,26 +28,118 @@ function WindCompass({ direction, size = 56 }: { direction: string; size?: numbe
         width: size,
         height: size,
         borderRadius: '50%',
-        border: '2px solid rgba(255,255,255,0.15)',
+        border: '2px solid rgba(144,202,249,0.35)',
         position: 'relative',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'radial-gradient(circle, rgba(144,202,249,0.12) 0%, rgba(144,202,249,0.03) 75%)',
         flexShrink: 0,
+        boxShadow: '0 0 16px rgba(144,202,249,0.15)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'absolute',
+          top: 3,
+          fontSize: 10,
+          fontWeight: 800,
+          color: '#EF5350',
+          lineHeight: 1,
+        }}
+      >
+        N
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'absolute',
+          bottom: 3,
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'rgba(255,255,255,0.4)',
+          lineHeight: 1,
+        }}
+      >
+        S
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'absolute',
+          left: 4,
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'rgba(255,255,255,0.4)',
+          lineHeight: 1,
+        }}
+      >
+        W
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{
+          position: 'absolute',
+          right: 4,
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'rgba(255,255,255,0.4)',
+          lineHeight: 1,
+        }}
+      >
+        E
+      </Typography>
+
+      {/* 羅盤指針 (帶滑順旋轉與微幅彈性動畫) */}
       <Box
         sx={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          transform: `translate(-50%, -50%) rotate(${deg}deg)`,
-          fontSize: 20,
-          lineHeight: 1,
-          color: '#90CAF9',
-          userSelect: 'none',
+          width: 8,
+          height: size * 0.64,
+          marginTop: `-${(size * 0.64) / 2}px`,
+          marginLeft: '-4px',
+          transform: `rotate(${deg}deg)`,
+          transition: 'transform 1s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          pointerEvents: 'none',
         }}
       >
-        ↑
+        {/* 北針 (紅) */}
+        <Box
+          sx={{
+            width: 0,
+            height: 0,
+            borderLeft: '4px solid transparent',
+            borderRight: '4px solid transparent',
+            borderBottom: `${size * 0.32}px solid #EF5350`,
+            filter: 'drop-shadow(0 0 4px rgba(239,83,80,0.6))',
+          }}
+        />
+        {/* 南針 (藍) */}
+        <Box
+          sx={{
+            width: 0,
+            height: 0,
+            borderLeft: '4px solid transparent',
+            borderRight: '4px solid transparent',
+            borderTop: `${size * 0.32}px solid #90CAF9`,
+            opacity: 0.85,
+          }}
+        />
       </Box>
+      {/* 軸心 */}
+      <Box
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          bgcolor: '#FFF',
+          boxShadow: '0 0 6px rgba(255,255,255,0.8)',
+          zIndex: 2,
+        }}
+      />
     </Box>
   );
 }
@@ -85,7 +176,38 @@ export default function WindPanel({
             flexWrap: 'wrap',
           }}
         >
-          <AirIcon sx={{ fontSize: { xs: 44, sm: 56 }, color: '#90CAF9' }} />
+          <Box
+            sx={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              width: { xs: 64, sm: 80 },
+              height: { xs: 64, sm: 80 },
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(144,202,249,0.25) 0%, rgba(144,202,249,0) 70%)',
+              animation: 'windIconFloat 3.5s ease-in-out infinite',
+              '@keyframes windIconFloat': {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-5px)' },
+              },
+            }}
+          >
+            <Box
+              component="img"
+              src={getWeatherIconUrl('wind-spinner')}
+              alt="風速風向"
+              sx={{
+                width: { xs: 56, sm: 72 },
+                height: { xs: 56, sm: 72 },
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 4px 12px rgba(144,202,249,0.4))',
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }}
+            />
+          </Box>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h4" sx={{ fontWeight: 800, color: '#90CAF9', lineHeight: 1 }}>
               {currentPeriod.windDirection}

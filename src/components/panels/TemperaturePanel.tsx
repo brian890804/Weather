@@ -1,14 +1,21 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
-import ThermostatIcon from '@mui/icons-material/Thermostat';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import type { WeatherPeriod } from '../../types/weather';
-import { tempColor } from '../../utils/weatherUtils';
+import { tempColor, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
+
+function getTemperatureIconName(temp: string): string {
+  const t = parseInt(temp, 10);
+  if (isNaN(t)) return 'thermometer-celsius';
+  if (t >= 28) return 'thermometer-sun';
+  if (t <= 16) return 'thermometer-colder';
+  return 'thermometer-celsius';
+}
 
 interface TemperaturePanelProps {
   periods: WeatherPeriod[];
@@ -42,7 +49,38 @@ export default function TemperaturePanel({
             flexWrap: 'wrap',
           }}
         >
-          <ThermostatIcon sx={{ fontSize: { xs: 44, sm: 56 }, color: tempColor(currentPeriod.temperature) }} />
+          <Box
+            sx={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              width: { xs: 64, sm: 80 },
+              height: { xs: 64, sm: 80 },
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(239,83,80,0.25) 0%, rgba(239,83,80,0) 70%)',
+              animation: 'tempIconFloat 3.5s ease-in-out infinite',
+              '@keyframes tempIconFloat': {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-5px)' },
+              },
+            }}
+          >
+            <Box
+              component="img"
+              src={getWeatherIconUrl(getTemperatureIconName(currentPeriod.temperature))}
+              alt="氣溫狀況"
+              sx={{
+                width: { xs: 56, sm: 72 },
+                height: { xs: 56, sm: 72 },
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 4px 12px rgba(239,83,80,0.4))',
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }}
+            />
+          </Box>
           <Box>
             <Typography variant="h2" sx={{ fontWeight: 800, color: tempColor(currentPeriod.temperature), lineHeight: 1 }}>
               {currentPeriod.temperature}°C

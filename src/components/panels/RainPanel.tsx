@@ -3,12 +3,19 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import LinearProgress from '@mui/material/LinearProgress';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import UmbrellaIcon from '@mui/icons-material/BeachAccess';
 import type { WeatherPeriod } from '../../types/weather';
-import { popColor } from '../../utils/weatherUtils';
+import { popColor, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
+
+function getRainIconName(popStr: string): string {
+  const pop = parseInt(popStr, 10);
+  if (!isNaN(pop) && pop >= 30) {
+    return 'rain';
+  }
+  return 'umbrella';
+}
 
 interface RainPanelProps {
   periods: WeatherPeriod[];
@@ -50,7 +57,38 @@ export default function RainPanel({
             flexWrap: 'wrap',
           }}
         >
-          <UmbrellaIcon sx={{ fontSize: { xs: 44, sm: 56 }, color: popColor(currentPeriod.probabilityOfPrecipitation) }} />
+          <Box
+            sx={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              width: { xs: 64, sm: 80 },
+              height: { xs: 64, sm: 80 },
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(66,165,245,0.25) 0%, rgba(66,165,245,0) 70%)',
+              animation: 'rainIconFloat 3.5s ease-in-out infinite',
+              '@keyframes rainIconFloat': {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-5px)' },
+              },
+            }}
+          >
+            <Box
+              component="img"
+              src={getWeatherIconUrl(getRainIconName(currentPeriod.probabilityOfPrecipitation))}
+              alt="降雨機率"
+              sx={{
+                width: { xs: 56, sm: 72 },
+                height: { xs: 56, sm: 72 },
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 4px 12px rgba(66,165,245,0.4))',
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }}
+            />
+          </Box>
           <Box>
             <Typography variant="h2" sx={{ fontWeight: 800, color: popColor(currentPeriod.probabilityOfPrecipitation), lineHeight: 1 }}>
               {currentPeriod.probabilityOfPrecipitation !== '-'

@@ -1,27 +1,33 @@
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
-import LinearProgress from '@mui/material/LinearProgress';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
 import { tempColor } from '../../utils/weatherUtils';
 import { R } from '../../App';
-
+import PeriodCard from '../PeriodCard/PeriodCard';
+import DragScrollBox from '../common/DragScrollBox';
 
 interface TemperaturePanelProps {
   periods: WeatherPeriod[];
   currentPeriod?: WeatherPeriod;
+  selectedPeriodTime?: string;
+  onSelectPeriod?: (startTime: string) => void;
+  autoCurrentPeriodStartTime?: string;
 }
 
-export default function TemperaturePanel({ periods, currentPeriod }: TemperaturePanelProps) {
+export default function TemperaturePanel({
+  periods,
+  currentPeriod,
+  selectedPeriodTime,
+  onSelectPeriod,
+  autoCurrentPeriodStartTime,
+}: TemperaturePanelProps) {
   return (
     <Box>
-      {/* 目前溫度 hero */}
+      {/* 目前選中時段溫度 hero */}
       {currentPeriod && (
         <Box
           sx={{
@@ -41,17 +47,17 @@ export default function TemperaturePanel({ periods, currentPeriod }: Temperature
             <Typography variant="h2" sx={{ fontWeight: 800, color: tempColor(currentPeriod.temperature), lineHeight: 1 }}>
               {currentPeriod.temperature}°C
             </Typography>
-            <Typography variant="body1" sx={{ color: 'text.secondary' }}>平均溫度</Typography>
+            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>氣溫狀況</Typography>
           </Box>
           <Stack spacing={0.5}>
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <ArrowUpwardIcon sx={{ fontSize: 18, color: '#EF5350' }} />
               <Typography>最高 <strong>{currentPeriod.maxTemperature}°C</strong></Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 體感 {currentPeriod.maxApparentTemperature}°C
               </Typography>
             </Stack>
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <ArrowDownwardIcon sx={{ fontSize: 18, color: '#42A5F5' }} />
               <Typography>最低 <strong>{currentPeriod.minTemperature}°C</strong></Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -62,106 +68,33 @@ export default function TemperaturePanel({ periods, currentPeriod }: Temperature
         </Box>
       )}
 
-      {/* 7天溫度列表 */}
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: 'text.secondary' }}>
-        逐 12 小時溫度
+      {/* 下半部：水平左右拖動時段卡片 */}
+      <Typography variant="h6" sx={{ fontWeight: 800, mt: 3, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
+        未來 3 天逐時溫度預報（逐 3 小時）
+        <Typography
+          component="span"
+          sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
+        >
+          點擊卡片查看該時段詳情，可左右滑動/拖曳
+        </Typography>
       </Typography>
-      {/* 內部捲動容器 */}
-      <Box
-        sx={{
-          maxHeight: { xs: 400, sm: 520 },
-          overflowY: 'auto',
-          pr: 0.5,
-          '&::-webkit-scrollbar': { width: 5 },
-          '&::-webkit-scrollbar-track': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.04)' },
-          '&::-webkit-scrollbar-thumb': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.18)' },
-        }}
-      >
-      <Stack spacing={1.5}>
-        {periods.map((p) => {
-          const start = dayjs(p.startTime);
-          const max = parseInt(p.maxTemperature) || 0;
-          const min = parseInt(p.minTemperature) || 0;
-          const avg = parseInt(p.temperature) || 0;
-          const maxAll = 42;
 
-          return (
-            <Card
-              key={p.startTime}
-              elevation={0}
-              sx={{
-                borderRadius: `${R.md}px`,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}
-            >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
-                  <Box sx={{ minWidth: 130 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {start.format('M/D (dd)')}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {start.format('HH:mm')}–{dayjs(p.endTime).format('HH:mm')}
-                    </Typography>
-                  </Box>
-
-                  {/* 視覺化溫度條 */}
-                  <Box flex={1} sx={{ minWidth: 160 }}>
-                    <Box sx={{ position: 'relative', height: 10, bgcolor: 'rgba(255,255,255,0.06)', borderRadius: 5, overflow: 'hidden' }}>
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          left: `${(min / maxAll) * 100}%`,
-                          width: `${((max - min) / maxAll) * 100}%`,
-                          height: '100%',
-                          borderRadius: 5,
-                          background: `linear-gradient(to right, ${tempColor(String(min))}, ${tempColor(String(max))})`,
-                        }}
-                      />
-                    </Box>
-                  </Box>
-
-                  {/* 溫度數字 */}
-                  <Stack direction="row" spacing={2} sx={{ minWidth: 200 }}>
-                    <Stack alignItems="center">
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>均</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: tempColor(String(avg)) }}>
-                        {avg}°
-                      </Typography>
-                    </Stack>
-                    <Stack alignItems="center">
-                      <Typography variant="caption" sx={{ color: '#EF5350' }}>最高</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#EF5350' }}>
-                        {p.maxTemperature}°
-                      </Typography>
-                    </Stack>
-                    <Stack alignItems="center">
-                      <Typography variant="caption" sx={{ color: '#42A5F5' }}>最低</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#42A5F5' }}>
-                        {p.minTemperature}°
-                      </Typography>
-                    </Stack>
-                    <Stack alignItems="center">
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>感高</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: tempColor(p.maxApparentTemperature) }}>
-                        {p.maxApparentTemperature}°
-                      </Typography>
-                    </Stack>
-                    <Stack alignItems="center">
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>感低</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: tempColor(p.minApparentTemperature) }}>
-                        {p.minApparentTemperature}°
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Stack>
-      </Box>
+      <DragScrollBox>
+        {periods.map((p) => (
+          <PeriodCard
+            key={p.startTime}
+            period={p}
+            category="temperature"
+            isCurrent={p.startTime === autoCurrentPeriodStartTime}
+            isSelected={
+              selectedPeriodTime
+                ? p.startTime === selectedPeriodTime
+                : p.startTime === autoCurrentPeriodStartTime
+            }
+            onSelect={onSelectPeriod}
+          />
+        ))}
+      </DragScrollBox>
     </Box>
   );
 }

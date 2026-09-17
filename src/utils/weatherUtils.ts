@@ -138,3 +138,22 @@ export function tempColor(temp: string): string {
   if (v <= 30) return '#FFA726';
   return '#EF5350';
 }
+
+/** 舒適度顏色 */
+export function comfortColor(desc: string): string {
+  if (desc.includes('舒適')) return '#66BB6A';
+  if (desc.includes('悶熱') || desc.includes('炎熱')) return '#EF5350';
+  if (desc.includes('寒冷') || desc.includes('偏涼')) return '#42A5F5';
+  return '#FFA726';
+}
+
+/** 蒲福風力等級顏色 */
+export function bftColor(scale: string): string {
+  const v = parseInt(scale);
+  if (v <= 2) return '#81C784';
+  if (v <= 4) return '#64B5F6';
+  if (v <= 6) return '#FFA726';
+  if (v <= 9) return '#EF5350';
+  return '#AB47BC';
+}
+

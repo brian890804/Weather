@@ -2,83 +2,92 @@ import axios from 'axios';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
 import { useEffect, useRef } from 'react';
-import type { ApiResponse } from '../types/weather';
-import { parseApiResponse } from '../utils/parser';
+import type { ApiResponse, ParsedCityData } from '../types/weather';
+import { CITIES } from '../utils/cities';
+import { parseCityApiResponse } from '../utils/parser';
 import { readCache, writeCache, isCacheValid, msUntilNextWindow } from '../utils/cache';
 import { useWeatherStore } from '../store/weatherStore';
 
-const API_URL =
-  'https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization=rdec-key-123-45678-011121314';
+const AUTH_KEY = 'rdec-key-123-45678-011121314';
 
-const fetcher = (url: string) =>
-  axios.get<ApiResponse>(url).then((r) => r.data);
+/** 併發拉取所有 22 個縣市的 API */
+async function fetchAllCities(): Promise<ParsedCityData[]> {
+  const promises = CITIES.map(async (city) => {
+    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${city.id}?Authorization=${AUTH_KEY}`;
+    const res = await axios.get<ApiResponse>(url);
+    return parseCityApiResponse(res.data, city.name, city.id);
+  });
+
+  return await Promise.all(promises);
+}
 
 function getSWRKey(): string | null {
   const cache = readCache();
-  if (cache && isCacheValid(cache)) return null;
-  return API_URL;
+  if (cache && isCacheValid(cache)) {
+    return null; // 快取有效，跳過網路請求
+  }
+  return 'ALL_CITIES_WEATHER_DATA';
 }
 
 export function useWeatherData() {
   const {
-    setLocations,
+    setCities,
     setIsLoading,
     setError,
     setLastFetchedAt,
-    setSelectedLocation,
-    selectedLocation,
-    locations,
+    cities,
   } = useWeatherStore();
 
   const pollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** 初始化：先讀快取 */
+  /** 1. 初始化：先載入快取（秒開體驗，若已過期則在背景靜默更新） */
   useEffect(() => {
     const cache = readCache();
-    if (cache && isCacheValid(cache)) {
-      setLocations(cache.data);
+    if (cache && cache.cities && cache.cities.length > 0) {
+      setCities(cache.cities);
       setLastFetchedAt(cache.fetchedAt);
-      // 優先恢復 localStorage 記憶的縣市，若不在清單才 fallback 第一個
-      if (cache.data.length > 0) {
-        const saved = selectedLocation;
-        const found = cache.data.find((l) => l.locationName === saved);
-        setSelectedLocation(found ? found.locationName : cache.data[0].locationName);
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** 2. SWR 控制資料載入 */
   const { data, error, isLoading, mutate } = useSWR(
     getSWRKey,
-    fetcher,
+    fetchAllCities,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 0,
+      dedupingInterval: 60 * 1000,
     }
   );
 
-  /** 當 API 回資料時，解析並存快取 */
+  /** 3. 當 API 回傳新資料時更新快取與 Store */
   useEffect(() => {
-    if (!data) return;
-    const parsed = parseApiResponse(data);
+    if (!data || data.length === 0) return;
     const now = dayjs().toISOString();
-    writeCache({ fetchedAt: now, data: parsed });
-    setLocations(parsed);
+    writeCache({ fetchedAt: now, cities: data });
+    setCities(data);
     setLastFetchedAt(now);
-    // 新資料到，若已有記憶的縣市就沿用，否則 fallback
-    if (parsed.length > 0) {
-      const saved = useWeatherStore.getState().selectedLocation;
-      const found = parsed.find((l) => l.locationName === saved);
-      setSelectedLocation(found ? found.locationName : parsed[0].locationName);
-    }
-  }, [data, setLocations, setLastFetchedAt, setSelectedLocation]);
+  }, [data, setCities, setLastFetchedAt]);
 
-  useEffect(() => { setIsLoading(isLoading); }, [isLoading, setIsLoading]);
-  useEffect(() => { setError(error ? String(error) : null); }, [error, setError]);
-
-  /** Polling */
+  /** 4. 同步 loading 與 error */
   useEffect(() => {
+    setIsLoading(isLoading);
+  }, [isLoading, setIsLoading]);
+
+  useEffect(() => {
+    setError(error ? (error.message || String(error)) : null);
+  }, [error, setError]);
+
+  /** 5. 6hr 定時排程與喚醒檢驗：定時喚醒 + 休眠/切換分頁時主動檢查跨視窗狀態 */
+  useEffect(() => {
+    function checkAndRefetch() {
+      const cache = readCache();
+      if (!cache || !isCacheValid(cache)) {
+        mutate();
+      }
+    }
+
     function scheduleNext() {
       const ms = msUntilNextWindow();
       pollingTimer.current = setTimeout(() => {
@@ -86,9 +95,24 @@ export function useWeatherData() {
         scheduleNext();
       }, ms);
     }
+
     scheduleNext();
-    return () => { if (pollingTimer.current) clearTimeout(pollingTimer.current); };
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndRefetch();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      if (pollingTimer.current) clearTimeout(pollingTimer.current);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
   }, [mutate]);
 
-  return { locations, isLoading, error };
+  return { cities, isLoading, error, refetch: mutate };
 }

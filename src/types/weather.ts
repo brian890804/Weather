@@ -1,12 +1,15 @@
 export interface TimeEntry {
-  StartTime: string;
-  EndTime: string;
+  DataTime?: string;
+  StartTime?: string;
+  EndTime?: string;
   ElementValue: Record<string, string>[];
+  [key: string]: any;
 }
 
 export interface WeatherElement {
   ElementName: string;
   Time: TimeEntry[];
+  [key: string]: any;
 }
 
 export interface Location {
@@ -15,6 +18,7 @@ export interface Location {
   Latitude: string;
   Longitude: string;
   WeatherElement: WeatherElement[];
+  [key: string]: any;
 }
 
 export interface Locations {
@@ -22,6 +26,7 @@ export interface Locations {
   LocationsName: string;
   Dataid: string;
   Location: Location[];
+  [key: string]: any;
 }
 
 export interface ApiField {
@@ -40,7 +45,7 @@ export interface ApiResponse {
   };
 }
 
-/** 每個 12hr 時段的解析後資料 */
+/** 每個時段的解析後資料 */
 export interface WeatherPeriod {
   startTime: string;
   endTime: string;
@@ -71,14 +76,27 @@ export interface WeatherPeriod {
   // 紫外線
   uvIndex: string;
   uvExposureLevel: string;
+  [key: string]: any;
 }
 
-export interface ParsedLocationData {
-  locationName: string;
+export interface ParsedTownshipData {
+  townshipName: string;
+  geocode: string;
+  latitude: string;
+  longitude: string;
   periods: WeatherPeriod[];
+  [key: string]: any;
+}
+
+export interface ParsedCityData {
+  cityName: string;
+  datasetId: string;
+  townships: ParsedTownshipData[];
+  [key: string]: any;
 }
 
 export interface CachedData {
   fetchedAt: string; // ISO string
-  data: ParsedLocationData[];
+  cities: ParsedCityData[];
+  [key: string]: any;
 }

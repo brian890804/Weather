@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import type { CachedData } from '../types/weather';
 
-const CACHE_KEY = 'weather_cache';
+const CACHE_KEY = 'weather_cities_cache_v2';
 const WINDOW_HOURS = 6;
 
 /** 取得當前所屬的 6hr 視窗起點 (UTC+8)
@@ -23,7 +23,11 @@ export function readCache(): CachedData | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as CachedData;
+    const parsed = JSON.parse(raw) as CachedData;
+    if (!parsed || !Array.isArray(parsed.cities) || parsed.cities.length === 0) {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -31,7 +35,11 @@ export function readCache(): CachedData | null {
 
 /** 寫入 localStorage 快取 */
 export function writeCache(data: CachedData): void {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('LocalStorage quota exceeded or write error:', err);
+  }
 }
 
 /** 清除快取 */
@@ -44,14 +52,17 @@ export function clearCache(): void {
  * fetchedAt 要在 [windowStart, windowEnd) 之間才算有效
  */
 export function isCacheValid(cache: CachedData, now = dayjs()): boolean {
+  if (!cache || !cache.fetchedAt || !cache.cities || cache.cities.length === 0) {
+    return false;
+  }
   const windowStart = getCurrentWindowStart(now);
   const windowEnd = getCurrentWindowEnd(now);
   const fetchedAt = dayjs(cache.fetchedAt);
-  return fetchedAt.isAfter(windowStart) && fetchedAt.isBefore(windowEnd);
+  return !fetchedAt.isBefore(windowStart) && fetchedAt.isBefore(windowEnd);
 }
 
 /** 計算距下一個 6hr 視窗開始的毫秒數 */
 export function msUntilNextWindow(now = dayjs()): number {
   const nextStart = getCurrentWindowEnd(now);
-  return nextStart.diff(now);
+  return Math.max(nextStart.diff(now), 1000);
 }

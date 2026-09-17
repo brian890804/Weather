@@ -1,16 +1,12 @@
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
 import AirIcon from '@mui/icons-material/Air';
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
 import { beaufortLabel } from '../../utils/weatherUtils';
 import { R } from '../../App';
+import PeriodCard from '../PeriodCard/PeriodCard';
+import DragScrollBox from '../common/DragScrollBox';
 
-/** 風向轉羅盤角度 */
 function windDegree(dir: string): number {
   const map: Record<string, number> = {
     '北風': 0, '偏北風': 0,
@@ -25,17 +21,6 @@ function windDegree(dir: string): number {
   return map[dir] ?? 0;
 }
 
-/** 蒲福風力等級顏色 */
-function bftColor(scale: string): string {
-  const v = parseInt(scale);
-  if (v <= 2) return '#81C784';
-  if (v <= 4) return '#64B5F6';
-  if (v <= 6) return '#FFA726';
-  if (v <= 9) return '#EF5350';
-  return '#AB47BC';
-}
-
-/** 風羅盤指針 */
 function WindCompass({ direction, size = 56 }: { direction: string; size?: number }) {
   const deg = windDegree(direction);
   return (
@@ -71,9 +56,18 @@ function WindCompass({ direction, size = 56 }: { direction: string; size?: numbe
 interface WindPanelProps {
   periods: WeatherPeriod[];
   currentPeriod?: WeatherPeriod;
+  selectedPeriodTime?: string;
+  onSelectPeriod?: (startTime: string) => void;
+  autoCurrentPeriodStartTime?: string;
 }
 
-export default function WindPanel({ periods, currentPeriod }: WindPanelProps) {
+export default function WindPanel({
+  periods,
+  currentPeriod,
+  selectedPeriodTime,
+  onSelectPeriod,
+  autoCurrentPeriodStartTime,
+}: WindPanelProps) {
   return (
     <Box>
       {/* 目前風況 hero */}
@@ -92,14 +86,14 @@ export default function WindPanel({ periods, currentPeriod }: WindPanelProps) {
           }}
         >
           <AirIcon sx={{ fontSize: { xs: 44, sm: 56 }, color: '#90CAF9' }} />
-          <Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="h4" sx={{ fontWeight: 800, color: '#90CAF9', lineHeight: 1 }}>
               {currentPeriod.windDirection}
             </Typography>
-            <Typography variant="h6" sx={{ color: 'text.secondary' }}>
+            <Typography variant="h6" sx={{ color: 'text.secondary', mt: 0.5 }}>
               {beaufortLabel(currentPeriod.beaufortScale)} (蒲福 {currentPeriod.beaufortScale} 級)
             </Typography>
-            <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
               風速 {currentPeriod.windSpeed} m/s
             </Typography>
           </Box>
@@ -107,73 +101,33 @@ export default function WindPanel({ periods, currentPeriod }: WindPanelProps) {
         </Box>
       )}
 
-      {/* 逐期風況 */}
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: 'text.secondary' }}>
-        逐 12 小時風況
+      {/* 下半部：水平左右拖動時段卡片 */}
+      <Typography variant="h6" sx={{ fontWeight: 800, mt: 3, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
+        未來 3 天逐時風況預報（逐 3 小時）
+        <Typography
+          component="span"
+          sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
+        >
+          點擊卡片查看該時段詳情，可左右滑動/拖曳
+        </Typography>
       </Typography>
-      <Box
-        sx={{
-          maxHeight: { xs: 400, sm: 520 },
-          overflowY: 'auto',
-          pr: 0.5,
-          '&::-webkit-scrollbar': { width: 5 },
-          '&::-webkit-scrollbar-track': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.04)' },
-          '&::-webkit-scrollbar-thumb': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.18)' },
-        }}
-      >
-      <Stack spacing={1.5}>
-        {periods.map((p) => {
-          const start = dayjs(p.startTime);
-          const color = bftColor(p.beaufortScale);
-          return (
-            <Card
-              key={p.startTime}
-              elevation={0}
-              sx={{
-                borderRadius: `${R.md}px`,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}
-            >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
-                  {/* 時間 */}
-                  <Box sx={{ minWidth: 130 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {start.format('M/D (dd)')}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {start.format('HH:mm')}–{dayjs(p.endTime).format('HH:mm')}
-                    </Typography>
-                  </Box>
 
-                  {/* 羅盤 */}
-                  <WindCompass direction={p.windDirection} size={44} />
-
-                  {/* 數據 */}
-                  <Stack direction="row" spacing={2} flex={1} alignItems="center" flexWrap="wrap">
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#90CAF9', minWidth: 60 }}>
-                      {p.windDirection}
-                    </Typography>
-                    <Chip
-                      label={`蒲福 ${p.beaufortScale} 級`}
-                      size="small"
-                      sx={{ bgcolor: `${color}22`, color, border: `1px solid ${color}55`, fontWeight: 700 }}
-                    />
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {beaufortLabel(p.beaufortScale)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {p.windSpeed} m/s
-                    </Typography>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Stack>
-      </Box>
+      <DragScrollBox>
+        {periods.map((p) => (
+          <PeriodCard
+            key={p.startTime}
+            period={p}
+            category="wind"
+            isCurrent={p.startTime === autoCurrentPeriodStartTime}
+            isSelected={
+              selectedPeriodTime
+                ? p.startTime === selectedPeriodTime
+                : p.startTime === autoCurrentPeriodStartTime
+            }
+            onSelect={onSelectPeriod}
+          />
+        ))}
+      </DragScrollBox>
     </Box>
   );
 }

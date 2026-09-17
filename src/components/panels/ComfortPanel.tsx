@@ -1,39 +1,39 @@
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
 import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAlt';
 import SentimentVeryDissatisfiedIcon from '@mui/icons-material/SentimentVeryDissatisfied';
 import SentimentNeutralIcon from '@mui/icons-material/SentimentNeutral';
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
-import { tempColor } from '../../utils/weatherUtils';
+import { tempColor, comfortColor } from '../../utils/weatherUtils';
 import { R } from '../../App';
-
+import PeriodCard from '../PeriodCard/PeriodCard';
+import DragScrollBox from '../common/DragScrollBox';
 
 function comfortIcon(desc: string) {
-  if (desc.includes('舒適')) return <SentimentSatisfiedAltIcon sx={{ color: '#66BB6A' }} />;
-  if (desc.includes('悶熱') || desc.includes('炎熱')) return <SentimentVeryDissatisfiedIcon sx={{ color: '#EF5350' }} />;
-  return <SentimentNeutralIcon sx={{ color: '#FFA726' }} />;
-}
-
-function comfortColor(desc: string): string {
-  if (desc.includes('舒適')) return '#66BB6A';
-  if (desc.includes('悶熱') || desc.includes('炎熱')) return '#EF5350';
-  if (desc.includes('寒冷') || desc.includes('偏涼')) return '#42A5F5';
-  return '#FFA726';
+  if (desc.includes('舒適')) return <SentimentSatisfiedAltIcon sx={{ color: '#66BB6A', fontSize: 64 }} />;
+  if (desc.includes('悶熱') || desc.includes('炎熱')) return <SentimentVeryDissatisfiedIcon sx={{ color: '#EF5350', fontSize: 64 }} />;
+  return <SentimentNeutralIcon sx={{ color: '#FFA726', fontSize: 64 }} />;
 }
 
 interface ComfortPanelProps {
   periods: WeatherPeriod[];
   currentPeriod?: WeatherPeriod;
+  selectedPeriodTime?: string;
+  onSelectPeriod?: (startTime: string) => void;
+  autoCurrentPeriodStartTime?: string;
 }
 
-export default function ComfortPanel({ periods, currentPeriod }: ComfortPanelProps) {
+export default function ComfortPanel({
+  periods,
+  currentPeriod,
+  selectedPeriodTime,
+  onSelectPeriod,
+  autoCurrentPeriodStartTime,
+}: ComfortPanelProps) {
   return (
     <Box>
+      {/* 目前舒適度 hero */}
       {currentPeriod && (
         <Box
           sx={{
@@ -55,16 +55,13 @@ export default function ComfortPanel({ periods, currentPeriod }: ComfortPanelPro
             <Typography variant="h4" sx={{ fontWeight: 800, color: comfortColor(currentPeriod.maxComfortIndexDescription) }}>
               {currentPeriod.maxComfortIndexDescription}
             </Typography>
-            <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
               舒適度指數 {currentPeriod.minComfortIndex} – {currentPeriod.maxComfortIndex}
             </Typography>
           </Box>
           <Stack spacing={0.5}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              最高體感 <strong style={{ color: tempColor(currentPeriod.maxApparentTemperature) }}>{currentPeriod.maxApparentTemperature}°C</strong>
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              最低體感 <strong style={{ color: tempColor(currentPeriod.minApparentTemperature) }}>{currentPeriod.minApparentTemperature}°C</strong>
+              體感溫度 <strong style={{ color: tempColor(currentPeriod.maxApparentTemperature) }}>{currentPeriod.maxApparentTemperature}°C</strong>
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               相對濕度 <strong>{currentPeriod.relativeHumidity}%</strong>
@@ -73,72 +70,33 @@ export default function ComfortPanel({ periods, currentPeriod }: ComfortPanelPro
         </Box>
       )}
 
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: 'text.secondary' }}>
-        逐 12 小時舒適度
+      {/* 下半部：水平左右拖動時段卡片 */}
+      <Typography variant="h6" sx={{ fontWeight: 800, mt: 3, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
+        未來 3 天逐時舒適度預報（逐 3 小時）
+        <Typography
+          component="span"
+          sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
+        >
+          點擊卡片查看該時段詳情，可左右滑動/拖曳
+        </Typography>
       </Typography>
-      <Box
-        sx={{
-          maxHeight: { xs: 400, sm: 520 },
-          overflowY: 'auto',
-          pr: 0.5,
-          '&::-webkit-scrollbar': { width: 5 },
-          '&::-webkit-scrollbar-track': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.04)' },
-          '&::-webkit-scrollbar-thumb': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.18)' },
-        }}
-      >
-      <Stack spacing={1.5}>
-        {periods.map((p) => {
-          const start = dayjs(p.startTime);
-          return (
-            <Card
-              key={p.startTime}
-              elevation={0}
-              sx={{
-                borderRadius: `${R.md}px`,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}
-            >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
-                  <Box sx={{ minWidth: 130 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {start.format('M/D (dd)')}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {start.format('HH:mm')}–{dayjs(p.endTime).format('HH:mm')}
-                    </Typography>
-                  </Box>
 
-                  <Stack direction="row" spacing={1} alignItems="center" flex={1} flexWrap="wrap">
-                    {comfortIcon(p.maxComfortIndexDescription)}
-                    <Chip
-                      label={p.maxComfortIndexDescription}
-                      size="small"
-                      sx={{
-                        bgcolor: `${comfortColor(p.maxComfortIndexDescription)}22`,
-                        color: comfortColor(p.maxComfortIndexDescription),
-                        border: `1px solid ${comfortColor(p.maxComfortIndexDescription)}44`,
-                        fontWeight: 700,
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      指數 {p.minComfortIndex}–{p.maxComfortIndex}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: tempColor(p.maxApparentTemperature) }}>
-                      體感 {p.minApparentTemperature}°–{p.maxApparentTemperature}°
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#42A5F5' }}>
-                      濕度 {p.relativeHumidity}%
-                    </Typography>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Stack>
-      </Box>
+      <DragScrollBox>
+        {periods.map((p) => (
+          <PeriodCard
+            key={p.startTime}
+            period={p}
+            category="comfort"
+            isCurrent={p.startTime === autoCurrentPeriodStartTime}
+            isSelected={
+              selectedPeriodTime
+                ? p.startTime === selectedPeriodTime
+                : p.startTime === autoCurrentPeriodStartTime
+            }
+            onSelect={onSelectPeriod}
+          />
+        ))}
+      </DragScrollBox>
     </Box>
   );
 }

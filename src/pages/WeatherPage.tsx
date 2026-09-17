@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
@@ -6,10 +6,6 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Skeleton from '@mui/material/Skeleton';
@@ -18,6 +14,7 @@ import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import dayjs from 'dayjs';
@@ -25,7 +22,9 @@ import 'dayjs/locale/zh-tw';
 
 import { useWeatherStore, type TabCategory } from '../store/weatherStore';
 import { useWeatherData } from '../hooks/useWeatherData';
+import { CITIES } from '../utils/cities';
 import PeriodCard from '../components/PeriodCard/PeriodCard';
+import DragScrollBox from '../components/common/DragScrollBox';
 import OverviewPanel from '../components/panels/OverviewPanel';
 import TemperaturePanel from '../components/panels/TemperaturePanel';
 import WindPanel from '../components/panels/WindPanel';
@@ -45,11 +44,13 @@ const TAB_CONFIG: { value: TabCategory; label: string }[] = [
 ];
 
 export default function WeatherPage() {
-  const { isLoading, error } = useWeatherData();
+  const { isLoading, error, refetch } = useWeatherData();
   const {
-    locations,
-    selectedLocation,
-    setSelectedLocation,
+    cities,
+    selectedCity,
+    setSelectedCity,
+    selectedTownship,
+    setSelectedTownship,
     activeTab,
     setActiveTab,
     lastFetchedAt,
@@ -57,172 +58,315 @@ export default function WeatherPage() {
     setSelectedPeriodTime,
   } = useWeatherStore();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_refreshKey, setRefreshKey] = useState(0);
+  const [_refreshing, setRefreshing] = useState(false);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const locationData = locations.find((l) => l.locationName === selectedLocation);
-  const periods = locationData?.periods ?? [];
+  // 1. 取得當前選取縣市的資料（useMemo 快取）
+  const currentCityData = useMemo(
+    () => cities.find((c) => c.cityName === selectedCity),
+    [cities, selectedCity]
+  );
+  const townships = useMemo(
+    () => currentCityData?.townships ?? [],
+    [currentCityData]
+  );
 
-  // 目前所在的時段（以當前時間判斷）
-  const now = dayjs();
-  const autoCurrentPeriod = periods.find(
-    (p) => now.isAfter(dayjs(p.startTime)) && now.isBefore(dayjs(p.endTime))
-  ) ?? periods[0];
+  // 2. 取得當前選取鄉鎮的資料（useMemo 快取）
+  const currentTownshipData = useMemo(
+    () => townships.find((t) => t.townshipName === selectedTownship) ?? townships[0],
+    [townships, selectedTownship]
+  );
+  const periods = useMemo(
+    () => currentTownshipData?.periods ?? [],
+    [currentTownshipData]
+  );
 
-  // 使用者選中的時段（點卡片），或自動時段
-  const displayPeriod = selectedPeriodTime
-    ? (periods.find((p) => p.startTime === selectedPeriodTime) ?? autoCurrentPeriod)
-    : autoCurrentPeriod;
+  // 3. 判斷自動預設當前時段（以現在時間為基準）
+  const autoCurrentPeriod = useMemo(() => {
+    const now = dayjs();
+    return (
+      periods.find(
+        (p) => now.isAfter(dayjs(p.startTime)) && now.isBefore(dayjs(p.endTime))
+      ) ?? periods[0]
+    );
+  }, [periods]);
 
-  function handleSelectPeriod(startTime: string) {
-    // 再點一次已選中的 → 取消選取（回到自動）
-    if (selectedPeriodTime === startTime) {
-      setSelectedPeriodTime(null);
-    } else {
-      setSelectedPeriodTime(startTime);
-    }
-  }
+  // 4. 使用者點擊時段卡片選中的時段（瞬間秒開）
+  const displayPeriod = useMemo(() => {
+    return selectedPeriodTime
+      ? periods.find((p) => p.startTime === selectedPeriodTime) ?? autoCurrentPeriod
+      : autoCurrentPeriod;
+  }, [selectedPeriodTime, periods, autoCurrentPeriod]);
 
-  function handleRefresh() {
+  const handleSelectPeriod = useCallback((startTime: string) => {
+    setSelectedPeriodTime(startTime);
+  }, [setSelectedPeriodTime]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
     clearCache();
-    setRefreshKey((k) => k + 1);
-    window.location.reload();
-  }
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   return (
     <Box
       sx={{
         minHeight: '100vh',
         background:
-          'radial-gradient(ellipse at 20% 20%, rgba(30,60,114,0.8) 0%, transparent 60%), radial-gradient(ellipse at 80% 80%, rgba(42,82,152,0.5) 0%, transparent 60%), #0a0f1e',
+          'radial-gradient(ellipse at 20% 10%, rgba(30,60,114,0.7) 0%, transparent 60%), radial-gradient(ellipse at 80% 90%, rgba(42,82,152,0.4) 0%, transparent 60%), #0a0f1e',
       }}
     >
-      {/* ── AppBar ── */}
+      {/* ── Top AppBar ── */}
       <AppBar
         position="sticky"
         elevation={0}
         sx={{
-          background: 'rgba(10, 15, 30, 0.85)',
+          background: 'rgba(10, 15, 30, 0.88)',
           backdropFilter: 'blur(20px)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
+          zIndex: 1100,
         }}
       >
         <Toolbar
           sx={{
             gap: { xs: 1, sm: 2 },
             flexWrap: 'nowrap',
-            minHeight: { xs: 52, sm: 64 },
+            minHeight: { xs: 56, sm: 64 },
             px: { xs: 1.5, sm: 3 },
           }}
         >
-          <WbSunnyIcon sx={{ color: '#FFD740', fontSize: { xs: 22, sm: 28 }, flexShrink: 0 }} />
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 800,
-              letterSpacing: 0.5,
-              flexGrow: 1,
-              fontSize: { xs: 15, sm: 18 },
-              whiteSpace: 'nowrap',
-            }}
-          >
-            台灣天氣預報
-          </Typography>
+          <WbSunnyIcon sx={{ color: '#FFD740', fontSize: { xs: 24, sm: 28 }, flexShrink: 0 }} />
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 800,
+                letterSpacing: 0.5,
+                fontSize: { xs: 16, sm: 20 },
+                lineHeight: 1.2,
+              }}
+            >
+              台灣各縣市即時天氣
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', display: { xs: 'none', sm: 'block' }, fontSize: 13, fontWeight: 500 }}
+            >
+              中央氣象署各縣市鄉鎮 3 天逐 3 小時精準天氣預報
+            </Typography>
+          </Box>
 
-          {/* 縣市選擇 */}
-          {locations.length > 0 && (
-            <FormControl size="small" sx={{ minWidth: { xs: 110, sm: 140 } }}>
-              <InputLabel sx={{ fontSize: { xs: 13, sm: 14 } }}>縣市</InputLabel>
-              <Select
-                value={selectedLocation}
-                label="縣市"
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                sx={{ borderRadius: `${R.sm}px`, fontSize: { xs: 13, sm: 14 } }}
-              >
-                {locations.map((l) => (
-                  <MenuItem key={l.locationName} value={l.locationName}>
-                    {l.locationName}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-
-          {/* 更新時間 – 手機隱藏 */}
+          {/* 更新時間 Chip */}
           {lastFetchedAt && !isMobile && (
             <Chip
-              label={`更新 ${dayjs(lastFetchedAt).format('HH:mm')}`}
+              label={`資料時間 ${dayjs(lastFetchedAt).format('HH:mm')}`}
               size="small"
               variant="outlined"
-              sx={{ borderColor: 'rgba(255,255,255,0.2)', color: 'text.secondary', fontSize: 11 }}
+              sx={{
+                borderColor: 'rgba(255,255,255,0.25)',
+                color: '#CBD5E1',
+                fontSize: 13,
+                fontWeight: 600,
+                height: 28,
+                px: 0.5,
+              }}
             />
           )}
 
-          <IconButton onClick={handleRefresh} size="small" sx={{ color: 'text.secondary', flexShrink: 0 }}>
+          {/* 重新整理按鈕 */}
+          <IconButton
+            onClick={handleRefresh}
+            size="small"
+            title="更新所有縣市資料"
+            sx={{
+              color: 'text.secondary',
+              flexShrink: 0,
+              bgcolor: 'rgba(255,255,255,0.05)',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+            }}
+          >
             <RefreshIcon fontSize="small" />
           </IconButton>
         </Toolbar>
       </AppBar>
 
-      {/* ── 主內容 ── */}
-      <Container maxWidth="xl" sx={{ py: { xs: 2, sm: 3 }, px: { xs: 1.5, sm: 3 } }}>
-        {/* 載入中 */}
-        {isLoading && (
-          <Box display="flex" justifyContent="center" py={8}>
-            <Stack alignItems="center" spacing={2}>
-              <CircularProgress size={48} />
-              <Typography color="text.secondary">正在載入天氣資料…</Typography>
+      {/* ── 主容器：加入初次進入頁面優雅 FadeIn 特效 ── */}
+      <Container
+        maxWidth="xl"
+        sx={{
+          py: { xs: 2, sm: 3 },
+          px: { xs: 1.5, sm: 3 },
+          animation: 'pageFadeIn 0.55s cubic-bezier(0.16, 1, 0.3, 1)',
+          '@keyframes pageFadeIn': {
+            '0%': { opacity: 0, transform: 'translateY(16px)' },
+            '100%': { opacity: 1, transform: 'translateY(0)' },
+          },
+        }}
+      >
+
+        {/* 載入中狀態 */}
+        {isLoading && cities.length === 0 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+            <Stack spacing={2} sx={{ alignItems: 'center' }}>
+              <CircularProgress size={52} thickness={4} />
+              <Typography sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                正在透過 Promise.all 併發載入全台 22 縣市天氣資料…
+              </Typography>
             </Stack>
           </Box>
         )}
 
-        {/* 錯誤 */}
-        {error && !isLoading && (
+        {/* 錯誤提示 */}
+        {error && !isLoading && cities.length === 0 && (
           <Alert severity="error" sx={{ mb: 3, borderRadius: `${R.md}px` }}>
-            無法取得天氣資料：{error}
+            取得天氣資料失敗：{error}
           </Alert>
         )}
 
-        {/* 骨架 */}
-        {!isLoading && !error && locations.length === 0 && (
+        {/* 骨架屏 */}
+        {!isLoading && !error && cities.length === 0 && (
           <Stack spacing={2}>
-            <Skeleton variant="rounded" height={160} sx={{ borderRadius: `${R.md}px` }} />
-            <Skeleton variant="rounded" height={100} sx={{ borderRadius: `${R.md}px` }} />
+            <Skeleton variant="rounded" height={60} sx={{ borderRadius: `${R.md}px` }} />
+            <Skeleton variant="rounded" height={48} sx={{ borderRadius: `${R.md}px` }} />
+            <Skeleton variant="rounded" height={220} sx={{ borderRadius: `${R.md}px` }} />
           </Stack>
         )}
 
-        {/* 主要內容 */}
-        {locationData && (
+        {/* ── 已取得縣市資料 ── */}
+        {cities.length > 0 && (
           <>
-            {/* 標題 */}
-            {displayPeriod && (
-              <Box mb={2}>
-                <Typography variant={isMobile ? 'h5' : 'h4'} sx={{ fontWeight: 800, mb: 0.25 }}>
-                  {selectedLocation}
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {/* 1. 大 Tab：22 縣市標籤（加大清晰） */}
+            <Box
+              sx={{
+                mb: 2,
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: `${R.md}px`,
+                p: 0.75,
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <Tabs
+                value={selectedCity}
+                onChange={(_, val) => setSelectedCity(val)}
+                variant="scrollable"
+                scrollButtons="auto"
+                sx={{
+                  minHeight: 52,
+                  '& .MuiTabs-indicator': {
+                    height: 4,
+                    borderRadius: 2,
+                    background: 'linear-gradient(90deg, #60A5FA, #818CF8)',
+                  },
+                  '& .MuiTab-root': {
+                    minHeight: 50,
+                    py: 1,
+                    px: { xs: 2.2, sm: 3 },
+                    borderRadius: `${R.sm}px`,
+                    fontWeight: 800,
+                    fontSize: { xs: 15, sm: 17 },
+                    color: 'text.secondary',
+                    '&.Mui-selected': {
+                      color: '#93C5FD',
+                      background: 'rgba(96,165,250,0.16)',
+                    },
+                  },
+                }}
+              >
+                {CITIES.map((c) => (
+                  <Tab key={c.name} value={c.name} label={c.name} />
+                ))}
+              </Tabs>
+            </Box>
+
+            {/* 2. 小 Tab：鄉鎮市區標籤（加大膠囊） */}
+            {townships.length > 0 && (
+              <Box
+                sx={{
+                  mb: 3,
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: `${R.md}px`,
+                  p: 1,
+                  border: '1px solid rgba(255,255,255,0.04)',
+                }}
+              >
+                <Tabs
+                  value={currentTownshipData?.townshipName || townships[0]?.townshipName}
+                  onChange={(_, val) => setSelectedTownship(val)}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  sx={{
+                    minHeight: 44,
+                    '& .MuiTabs-indicator': { display: 'none' },
+                    '& .MuiTab-root': {
+                      minHeight: 42,
+                      py: 0.75,
+                      px: { xs: 1.8, sm: 2.5 },
+                      mx: 0.4,
+                      borderRadius: `${R.sm}px`,
+                      fontWeight: 700,
+                      fontSize: { xs: 14, sm: 15.5 },
+                      color: 'text.secondary',
+                      border: '1px solid transparent',
+                      transition: 'all 0.15s ease',
+                      '&.Mui-selected': {
+                        color: '#FFFFFF',
+                        background: 'rgba(99,102,241,0.32)',
+                        borderColor: 'rgba(129,140,248,0.7)',
+                        boxShadow: '0 4px 14px rgba(99,102,241,0.3)',
+                      },
+                      '&:hover': {
+                        background: 'rgba(255,255,255,0.07)',
+                      },
+                    },
+                  }}
+                >
+                  {townships.map((t) => (
+                    <Tab key={t.townshipName} value={t.townshipName} label={t.townshipName} />
+                  ))}
+                </Tabs>
+              </Box>
+            )}
+
+            {/* 3. 目前位置與時段標題（放大） */}
+            {currentTownshipData && displayPeriod && (
+              <Box sx={{ mb: 2.5 }}>
+                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+                  <LocationOnIcon sx={{ color: '#60A5FA', fontSize: { xs: 28, sm: 34 } }} />
+                  <Typography
+                    variant={isMobile ? 'h5' : 'h4'}
+                    sx={{ fontWeight: 900, color: '#F1F5F9', letterSpacing: 0.5, fontSize: { xs: 22, sm: 30 } }}
+                  >
+                    {selectedCity} {currentTownshipData.townshipName}
+                  </Typography>
+                </Stack>
+                <Typography
+                  variant="body1"
+                  sx={{ color: 'text.secondary', mt: 0.5, ml: { sm: 5.5, xs: 5 }, fontSize: { xs: 14, sm: 16 }, fontWeight: 500 }}
+                >
                   {dayjs(displayPeriod.startTime).format('YYYY年M月D日 HH:mm')} –{' '}
-                  {dayjs(displayPeriod.endTime).format('HH:mm')} 預報
+                  {dayjs(displayPeriod.endTime).format('HH:mm')} 預報（逐 3 小時）
                 </Typography>
               </Box>
             )}
 
-            {/* Tabs */}
+            {/* 4. 天氣維度 Tabs（加大） */}
             <Tabs
               value={activeTab}
               onChange={(_, v) => setActiveTab(v as TabCategory)}
               sx={{
-                mb: { xs: 2, sm: 3 },
-                '& .MuiTabs-indicator': { height: 3, borderRadius: 2 },
+                mb: { xs: 2.5, sm: 3.5 },
+                minHeight: 50,
+                '& .MuiTabs-indicator': { height: 4, borderRadius: 2 },
                 '& .MuiTab-root': {
                   borderRadius: `${R.sm}px`,
-                  fontWeight: 600,
-                  fontSize: { xs: 12, sm: 14 },
-                  minWidth: { xs: 'auto', sm: 90 },
-                  px: { xs: 1.5, sm: 2 },
+                  fontWeight: 800,
+                  fontSize: { xs: 14.5, sm: 16.5 },
+                  minWidth: { xs: 'auto', sm: 110 },
+                  px: { xs: 2.2, sm: 3 },
+                  minHeight: 50,
                 },
               }}
               variant="scrollable"
@@ -233,42 +377,29 @@ export default function WeatherPage() {
               ))}
             </Tabs>
 
-            {/* ── Overview ── */}
+
+            {/* 5. 分頁內容展示 */}
             {activeTab === 'overview' && (
               <>
-                {/* 上半：選中/當前時段 overview */}
                 {displayPeriod && <OverviewPanel period={displayPeriod} />}
 
-                <Typography variant="h6" sx={{ fontWeight: 700, mt: 4, mb: 1.5, color: 'text.secondary' }}>
-                  未來 7 天（逐 12 小時）
+                {/* 水平滑動時段卡片清單 */}
+                <Typography variant="h6" sx={{ fontWeight: 800, mt: 4, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
+                  未來 3 天逐時預報（逐 3 小時）
                   <Typography
                     component="span"
-                    variant="caption"
-                    sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 400 }}
+                    sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
                   >
-                    點卡片查看詳情
+                    點擊卡片查看該時段詳情，可左右滑動/拖曳
                   </Typography>
                 </Typography>
 
-                {/* 水平捲動 cards */}
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: { xs: 1.5, sm: 2 },
-                    overflowX: 'auto',
-                    overflowY: 'visible',
-                    py: 1,
-                    mx: -0.5,
-                    px: 0.5,
-                    '&::-webkit-scrollbar': { height: 5 },
-                    '&::-webkit-scrollbar-track': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.04)' },
-                    '&::-webkit-scrollbar-thumb': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.18)' },
-                  }}
-                >
+                <DragScrollBox>
                   {periods.map((p) => (
                     <PeriodCard
                       key={p.startTime}
                       period={p}
+                      category="overview"
                       isCurrent={p.startTime === autoCurrentPeriod?.startTime}
                       isSelected={
                         selectedPeriodTime
@@ -278,21 +409,45 @@ export default function WeatherPage() {
                       onSelect={handleSelectPeriod}
                     />
                   ))}
-                </Box>
+                </DragScrollBox>
               </>
             )}
 
             {activeTab === 'temperature' && (
-              <TemperaturePanel periods={periods} currentPeriod={displayPeriod} />
+              <TemperaturePanel
+                periods={periods}
+                currentPeriod={displayPeriod}
+                selectedPeriodTime={selectedPeriodTime || autoCurrentPeriod?.startTime}
+                onSelectPeriod={handleSelectPeriod}
+                autoCurrentPeriodStartTime={autoCurrentPeriod?.startTime}
+              />
             )}
             {activeTab === 'wind' && (
-              <WindPanel periods={periods} currentPeriod={displayPeriod} />
+              <WindPanel
+                periods={periods}
+                currentPeriod={displayPeriod}
+                selectedPeriodTime={selectedPeriodTime || autoCurrentPeriod?.startTime}
+                onSelectPeriod={handleSelectPeriod}
+                autoCurrentPeriodStartTime={autoCurrentPeriod?.startTime}
+              />
             )}
             {activeTab === 'rain' && (
-              <RainPanel periods={periods} currentPeriod={displayPeriod} />
+              <RainPanel
+                periods={periods}
+                currentPeriod={displayPeriod}
+                selectedPeriodTime={selectedPeriodTime || autoCurrentPeriod?.startTime}
+                onSelectPeriod={handleSelectPeriod}
+                autoCurrentPeriodStartTime={autoCurrentPeriod?.startTime}
+              />
             )}
             {activeTab === 'comfort' && (
-              <ComfortPanel periods={periods} currentPeriod={displayPeriod} />
+              <ComfortPanel
+                periods={periods}
+                currentPeriod={displayPeriod}
+                selectedPeriodTime={selectedPeriodTime || autoCurrentPeriod?.startTime}
+                onSelectPeriod={handleSelectPeriod}
+                autoCurrentPeriodStartTime={autoCurrentPeriod?.startTime}
+              />
             )}
           </>
         )}

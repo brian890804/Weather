@@ -1,24 +1,30 @@
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import LinearProgress from '@mui/material/LinearProgress';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import UmbrellaIcon from '@mui/icons-material/BeachAccess';
-import WbSunnyIcon from '@mui/icons-material/WbSunny';
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
-import { popColor, uvLevelColor } from '../../utils/weatherUtils';
+import { popColor } from '../../utils/weatherUtils';
 import { R } from '../../App';
-
+import PeriodCard from '../PeriodCard/PeriodCard';
+import DragScrollBox from '../common/DragScrollBox';
 
 interface RainPanelProps {
   periods: WeatherPeriod[];
   currentPeriod?: WeatherPeriod;
+  selectedPeriodTime?: string;
+  onSelectPeriod?: (startTime: string) => void;
+  autoCurrentPeriodStartTime?: string;
 }
 
-export default function RainPanel({ periods, currentPeriod }: RainPanelProps) {
+export default function RainPanel({
+  periods,
+  currentPeriod,
+  selectedPeriodTime,
+  onSelectPeriod,
+  autoCurrentPeriodStartTime,
+}: RainPanelProps) {
   const popPeriods = periods.filter(
     (p) => p.probabilityOfPrecipitation !== '-'
   );
@@ -51,16 +57,16 @@ export default function RainPanel({ periods, currentPeriod }: RainPanelProps) {
                 ? `${currentPeriod.probabilityOfPrecipitation}%`
                 : '- %'}
             </Typography>
-            <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-              12 小時降雨機率
+            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
+              降雨機率
             </Typography>
           </Box>
           <Stack spacing={1}>
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <WaterDropIcon sx={{ color: '#42A5F5', fontSize: 18 }} />
               <Typography>相對濕度 <strong>{currentPeriod.relativeHumidity}%</strong></Typography>
             </Stack>
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <WaterDropIcon sx={{ color: '#80DEEA', fontSize: 18 }} />
               <Typography>露點溫度 <strong>{currentPeriod.dewPoint}°C</strong></Typography>
             </Stack>
@@ -68,7 +74,7 @@ export default function RainPanel({ periods, currentPeriod }: RainPanelProps) {
         </Box>
       )}
 
-      {/* 全週最高降雨機率 */}
+      {/* 最高降雨機率指示條 */}
       <Box
         sx={{
           p: 2,
@@ -79,7 +85,7 @@ export default function RainPanel({ periods, currentPeriod }: RainPanelProps) {
         }}
       >
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-          未來最高降雨機率：<strong style={{ color: popColor(String(maxPop)) }}>{maxPop}%</strong>
+          未來預報最高降雨機率：<strong style={{ color: popColor(String(maxPop)) }}>{maxPop}%</strong>
         </Typography>
         <LinearProgress
           variant="determinate"
@@ -93,91 +99,33 @@ export default function RainPanel({ periods, currentPeriod }: RainPanelProps) {
         />
       </Box>
 
-      {/* 逐期降雨 + 紫外線 */}
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: 'text.secondary' }}>
-        逐 12 小時降雨機率 & 紫外線
+      {/* 下半部：水平左右拖動時段卡片 */}
+      <Typography variant="h6" sx={{ fontWeight: 800, mt: 3, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
+        未來 3 天逐時降雨預報（逐 3 小時）
+        <Typography
+          component="span"
+          sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
+        >
+          點擊卡片查看該時段詳情，可左右滑動/拖曳
+        </Typography>
       </Typography>
-      <Box
-        sx={{
-          maxHeight: { xs: 400, sm: 520 },
-          overflowY: 'auto',
-          pr: 0.5,
-          '&::-webkit-scrollbar': { width: 5 },
-          '&::-webkit-scrollbar-track': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.04)' },
-          '&::-webkit-scrollbar-thumb': { borderRadius: 3, bgcolor: 'rgba(255,255,255,0.18)' },
-        }}
-      >
-      <Stack spacing={1.5}>
-        {periods.map((p) => {
-          const pop = p.probabilityOfPrecipitation;
-          const popVal = parseInt(pop) || 0;
-          const uvVal = parseInt(p.uvIndex) || 0;
-          const start = dayjs(p.startTime);
-          const isNight = start.hour() >= 18 || start.hour() < 6;
 
-          return (
-            <Card
-              key={p.startTime}
-              elevation={0}
-              sx={{
-                borderRadius: `${R.md}px`,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}
-            >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
-                  <Box sx={{ minWidth: 130 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {start.format('M/D (dd)')}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {start.format('HH:mm')}–{dayjs(p.endTime).format('HH:mm')}
-                    </Typography>
-                  </Box>
-
-                  {/* 降雨機率條 */}
-                  <Stack flex={1} spacing={0.5}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <WaterDropIcon sx={{ fontSize: 14, color: popColor(pop) }} />
-                      <Typography variant="body2" sx={{ minWidth: 32, fontWeight: 700, color: popColor(pop) }}>
-                        {pop !== '-' ? `${pop}%` : '-'}
-                      </Typography>
-                      <Box flex={1} sx={{ bgcolor: 'rgba(255,255,255,0.06)', borderRadius: 2, height: 6, overflow: 'hidden' }}>
-                        {pop !== '-' && (
-                          <Box sx={{ width: `${popVal}%`, height: '100%', bgcolor: popColor(pop), borderRadius: 2 }} />
-                        )}
-                      </Box>
-                    </Stack>
-
-                    {/* 紫外線 */}
-                    {!isNight && p.uvIndex !== '-' && (
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <WbSunnyIcon sx={{ fontSize: 14, color: uvLevelColor(p.uvExposureLevel) }} />
-                        <Typography variant="body2" sx={{ minWidth: 32, fontWeight: 700, color: uvLevelColor(p.uvExposureLevel) }}>
-                          UV {p.uvIndex}
-                        </Typography>
-                        <Box flex={1} sx={{ bgcolor: 'rgba(255,255,255,0.06)', borderRadius: 2, height: 6, overflow: 'hidden' }}>
-                          <Box sx={{ width: `${(uvVal / 11) * 100}%`, height: '100%', bgcolor: uvLevelColor(p.uvExposureLevel), borderRadius: 2 }} />
-                        </Box>
-                        <Typography variant="caption" sx={{ color: uvLevelColor(p.uvExposureLevel), fontWeight: 600 }}>
-                          {p.uvExposureLevel}
-                        </Typography>
-                      </Stack>
-                    )}
-                  </Stack>
-
-                  {/* 濕度 */}
-                  <Typography variant="body2" sx={{ color: '#42A5F5', fontWeight: 600, minWidth: 48 }}>
-                    {p.relativeHumidity}% 濕
-                  </Typography>
-                </Stack>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Stack>
-      </Box>
+      <DragScrollBox>
+        {periods.map((p) => (
+          <PeriodCard
+            key={p.startTime}
+            period={p}
+            category="rain"
+            isCurrent={p.startTime === autoCurrentPeriodStartTime}
+            isSelected={
+              selectedPeriodTime
+                ? p.startTime === selectedPeriodTime
+                : p.startTime === autoCurrentPeriodStartTime
+            }
+            onSelect={onSelectPeriod}
+          />
+        ))}
+      </DragScrollBox>
     </Box>
   );
 }

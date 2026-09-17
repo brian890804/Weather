@@ -140,12 +140,6 @@ export default function RainPanel({
       {/* 下半部：水平左右拖動時段卡片 */}
       <Typography variant="h6" sx={{ fontWeight: 800, mt: 3, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
         未來 3 天逐時降雨預報（逐 3 小時）
-        <Typography
-          component="span"
-          sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
-        >
-          點擊卡片查看該時段詳情，可左右滑動/拖曳
-        </Typography>
       </Typography>
 
       <DragScrollBox>

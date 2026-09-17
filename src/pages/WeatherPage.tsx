@@ -386,12 +386,6 @@ export default function WeatherPage() {
                 {/* 水平滑動時段卡片清單 */}
                 <Typography variant="h6" sx={{ fontWeight: 800, mt: 4, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
                   未來 3 天逐時預報（逐 3 小時）
-                  <Typography
-                    component="span"
-                    sx={{ ml: 1.5, color: 'text.secondary', fontWeight: 500, fontSize: { xs: 13, sm: 14.5 } }}
-                  >
-                    點擊卡片查看該時段詳情，可左右滑動/拖曳
-                  </Typography>
                 </Typography>
 
                 <DragScrollBox>

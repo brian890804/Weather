@@ -8,17 +8,66 @@ import { parseCityApiResponse } from '../utils/parser';
 import { readCache, writeCache, isCacheValid, msUntilNextWindow } from '../utils/cache';
 import { useWeatherStore } from '../store/weatherStore';
 
-const AUTH_KEY = 'rdec-key-123-45678-011121314';
+const DEFAULT_AUTH_KEY = 'rdec-key-123-45678-011121314';
 
-/** 併發拉取所有 22 個縣市的 API */
+export function getCwaApiKey(): string {
+  try {
+    return (
+      localStorage.getItem('cwa_api_key') ||
+      import.meta.env.VITE_CWA_API_KEY ||
+      DEFAULT_AUTH_KEY
+    );
+  } catch {
+    return DEFAULT_AUTH_KEY;
+  }
+}
+
+/** 分批拉取 22 個縣市，避免瞬間 22 併發觸發氣象署 429 限流 */
 async function fetchAllCities(): Promise<ParsedCityData[]> {
-  const promises = CITIES.map(async (city) => {
-    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${city.id}?Authorization=${AUTH_KEY}`;
-    const res = await axios.get<ApiResponse>(url);
-    return parseCityApiResponse(res.data, city.name, city.id);
-  });
+  const existingCache = readCache()?.cities ?? [];
+  const existingMap = new Map(existingCache.map((c) => [c.cityName, c]));
+  const apiKey = getCwaApiKey();
 
-  return await Promise.all(promises);
+  const BATCH_SIZE = 3;
+  const results: ParsedCityData[] = [];
+  let hasFailed = false;
+
+  for (let i = 0; i < CITIES.length; i += BATCH_SIZE) {
+    const batch = CITIES.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map(async (city) => {
+      try {
+        const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${city.id}?Authorization=${apiKey}`;
+        const res = await axios.get<ApiResponse>(url, { timeout: 8000 });
+        return parseCityApiResponse(res.data, city.name, city.id);
+      } catch (err: any) {
+        hasFailed = true;
+        console.warn(`[CWA API] 抓取 ${city.name} 失敗 (${err?.response?.status || err.message})，回退快取`);
+        // 若遭遇 429 或網路異常，優雅降級：使用該縣市本地已有的快取資料
+        const cached = existingMap.get(city.name);
+        if (cached) {
+          return cached;
+        }
+        throw err;
+      }
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+
+    // 批次間微間隔 200ms，平滑流量防止 WAF 429
+    if (i + BATCH_SIZE < CITIES.length) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  // 若部分失敗但所有縣市都有快取保底，正常回傳完整資料；若完全沒快取又失敗才報錯
+  if (results.length === CITIES.length) {
+    return results;
+  }
+  if (hasFailed && existingCache.length > 0) {
+    return existingCache;
+  }
+  return results;
 }
 
 function getSWRKey(): string | null {

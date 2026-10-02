@@ -50,6 +50,7 @@ interface WeatherState {
   // 選中的鄉鎮區 (小 Tab)
   selectedTownship: string;
   setSelectedTownship: (townshipName: string) => void;
+  setSelectedCityAndTownship: (cityName: string, townshipName: string) => void;
 
   // 選中的時段 (null = 自動當前時段)
   selectedPeriodTime: string | null;
@@ -124,6 +125,16 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   setSelectedTownship: (townshipName: string) => {
     saveTownship(townshipName);
     set({
+      selectedTownship: townshipName,
+      selectedPeriodTime: null,
+    });
+  },
+
+  setSelectedCityAndTownship: (cityName: string, townshipName: string) => {
+    saveCity(cityName);
+    saveTownship(townshipName);
+    set({
+      selectedCity: cityName,
       selectedTownship: townshipName,
       selectedPeriodTime: null,
     });

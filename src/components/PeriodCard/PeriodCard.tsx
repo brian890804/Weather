@@ -114,7 +114,7 @@ function PeriodCardBase({
                   size="small"
                   sx={{
                     height: 24,
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 800,
                     bgcolor: 'rgba(59,130,246,0.25)',
                     color: '#60A5FA',
@@ -128,7 +128,7 @@ function PeriodCardBase({
                   size="small"
                   sx={{
                     height: 24,
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 700,
                     bgcolor: 'rgba(255,255,255,0.1)',
                     color: '#CBD5E1',
@@ -237,7 +237,7 @@ function PeriodCardBase({
                   size="small"
                   sx={{
                     height: 24,
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 700,
                     bgcolor: `${bColor}25`,
                     color: bColor,
@@ -247,7 +247,7 @@ function PeriodCardBase({
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>等級</Typography>
-                <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 14.5, sm: 16 } }}>
+                <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 15, sm: 16 } }}>
                   {beaufortLabel(period.beaufortScale)}
                 </Typography>
               </Stack>
@@ -309,7 +309,7 @@ function PeriodCardBase({
                   size="small"
                   sx={{
                     height: 24,
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 800,
                     bgcolor: `${cColor}25`,
                     color: cColor,
@@ -319,7 +319,7 @@ function PeriodCardBase({
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>指數</Typography>
-                <Typography sx={{ fontWeight: 800, color: '#F1F5F9', fontSize: { xs: 15.5, sm: 17 } }}>
+                <Typography sx={{ fontWeight: 800, color: '#F1F5F9', fontSize: { xs: 16, sm: 17 } }}>
                   {period.minComfortIndex}
                 </Typography>
               </Stack>

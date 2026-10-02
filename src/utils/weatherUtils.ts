@@ -1,12 +1,12 @@
 /** 根據 WeatherCode (氣象局代碼) 或天氣描述，對應 meteocons SVG 名稱 */
 export function getWeatherIconName(
-  weatherCode: string,
-  weather: string,
+  weatherCode?: string,
+  weather?: string,
   isNight = false
 ): string {
   const suffix = isNight ? '-night' : '-day';
 
-  const code = weatherCode.padStart(2, '0');
+  const code = (weatherCode || '00').padStart(2, '0');
   // 氣象局天氣代碼: https://opendata.cwa.gov.tw/opendatadoc/MFC/D0047.pdf
   const codeMap: Record<string, string> = {
     '01': 'clear' + suffix,          // 晴
@@ -51,7 +51,7 @@ export function getWeatherIconName(
   }
 
   // fallback: 解析文字
-  const w = weather;
+  const w = weather || '';
   if (w.includes('雷')) return isNight ? 'thunderstorms-night' : 'thunderstorms-day';
   if (w.includes('雪')) return 'snow';
   if (w.includes('雨夾雪') || w.includes('夾雪')) return 'sleet';
@@ -86,7 +86,8 @@ export function isCurrentNight(startTime?: string): boolean {
 }
 
 /** 風力等級中文 */
-export function beaufortLabel(scale: string): string {
+export function beaufortLabel(scale?: string): string {
+  if (!scale || scale === '-') return '微風';
   const map: Record<string, string> = {
     '0': '無風',
     '1': '軟風',
@@ -106,7 +107,8 @@ export function beaufortLabel(scale: string): string {
 }
 
 /** 紫外線等級顏色 */
-export function uvLevelColor(level: string): string {
+export function uvLevelColor(level?: string): string {
+  if (!level) return '#90A4AE';
   const map: Record<string, string> = {
     '低量級': '#4CAF50',
     '中量級': '#FFEB3B',
@@ -118,8 +120,8 @@ export function uvLevelColor(level: string): string {
 }
 
 /** 降雨機率顏色 */
-export function popColor(pop: string): string {
-  const v = parseInt(pop);
+export function popColor(pop?: string): string {
+  const v = parseInt(pop || '0');
   if (isNaN(v)) return '#607D8B';
   if (v < 20) return '#4CAF50';
   if (v < 40) return '#8BC34A';
@@ -129,8 +131,8 @@ export function popColor(pop: string): string {
 }
 
 /** 溫度顏色 */
-export function tempColor(temp: string): string {
-  const v = parseInt(temp);
+export function tempColor(temp?: string): string {
+  const v = parseInt(temp || '0');
   if (isNaN(v)) return '#90A4AE';
   if (v <= 10) return '#42A5F5';
   if (v <= 18) return '#26C6DA';
@@ -140,7 +142,8 @@ export function tempColor(temp: string): string {
 }
 
 /** 舒適度顏色 */
-export function comfortColor(desc: string): string {
+export function comfortColor(desc?: string): string {
+  if (!desc || typeof desc !== 'string') return '#66BB6A';
   if (desc.includes('舒適')) return '#66BB6A';
   if (desc.includes('悶熱') || desc.includes('炎熱')) return '#EF5350';
   if (desc.includes('寒冷') || desc.includes('偏涼')) return '#42A5F5';
@@ -148,8 +151,9 @@ export function comfortColor(desc: string): string {
 }
 
 /** 蒲福風力等級顏色 */
-export function bftColor(scale: string): string {
-  const v = parseInt(scale);
+export function bftColor(scale?: string): string {
+  const v = parseInt(scale || '0');
+  if (isNaN(v)) return '#81C784';
   if (v <= 2) return '#81C784';
   if (v <= 4) return '#64B5F6';
   if (v <= 6) return '#FFA726';

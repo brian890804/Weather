@@ -38,7 +38,11 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Snackbar from '@mui/material/Snackbar';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
+import EditLocationAltIcon from '@mui/icons-material/EditLocationAlt';
 import { R } from '../App';
+import IOSScrollSnapWeather from '../components/ios/IOSScrollSnapWeather';
+import IOSLocationModal from '../components/ios/IOSLocationModal';
 
 dayjs.locale('zh-tw');
 
@@ -58,6 +62,7 @@ export default function WeatherPage() {
     setSelectedCity,
     selectedTownship,
     setSelectedTownship,
+    setSelectedCityAndTownship,
     activeTab,
     setActiveTab,
     lastFetchedAt,
@@ -68,6 +73,8 @@ export default function WeatherPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [desktopLocationModalOpen, setDesktopLocationModalOpen] = useState(false);
+  const [viewModeOverride, setViewModeOverride] = useState<'auto' | 'ios' | 'desktop'>('auto');
   const [inputKey, setInputKey] = useState(() => {
     try {
       return localStorage.getItem('cwa_api_key') || '';
@@ -87,7 +94,9 @@ export default function WeatherPage() {
   }, [cooldown]);
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  // 手機與平板直立模式 (< 900px) 自動啟用全新 iOS 4 頁滑動體驗
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isIOSView = viewModeOverride === 'ios' ? true : viewModeOverride === 'desktop' ? false : isMobile;
 
   // 1. 取得當前選取縣市的資料（useMemo 快取）
   const currentCityData = useMemo(
@@ -173,99 +182,185 @@ export default function WeatherPage() {
           'radial-gradient(ellipse at 20% 10%, rgba(30,60,114,0.7) 0%, transparent 60%), radial-gradient(ellipse at 80% 90%, rgba(42,82,152,0.4) 0%, transparent 60%), #0a0f1e',
       }}
     >
-      {/* ── Top AppBar ── */}
-      <AppBar
-        position="sticky"
-        elevation={0}
-        sx={{
-          background: 'rgba(10, 15, 30, 0.88)',
-          backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          zIndex: 1100,
-        }}
-      >
-        <Toolbar
-          sx={{
-            gap: { xs: 1, sm: 2 },
-            flexWrap: 'nowrap',
-            minHeight: { xs: 56, sm: 64 },
-            px: { xs: 1.5, sm: 3 },
-          }}
-        >
-          <WbSunnyIcon sx={{ color: '#FFD740', fontSize: { xs: 24, sm: 28 }, flexShrink: 0 }} />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 800,
-                letterSpacing: 0.5,
-                fontSize: { xs: 16, sm: 20 },
-                lineHeight: 1.2,
-              }}
-            >
-              台灣各縣市即時天氣
+      {/* ── 手機與 iOS 模式：全屏 3 頁上下滑動貼合 (Scroll Snap) 現代化氣象體驗 ── */}
+      {isIOSView ? (
+        cities.length > 0 ? (
+          <IOSScrollSnapWeather
+            cities={cities}
+            selectedCity={selectedCity}
+            selectedTownship={selectedTownship || currentTownshipData?.townshipName || townships[0]?.townshipName || '全區'}
+            setSelectedCityAndTownship={setSelectedCityAndTownship}
+            townships={townships}
+            periods={periods}
+            displayPeriod={displayPeriod}
+            autoCurrentPeriod={autoCurrentPeriod}
+            selectedPeriodTime={selectedPeriodTime}
+            onSelectPeriod={handleSelectPeriod}
+            lastFetchedAt={lastFetchedAt}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+            cooldown={cooldown}
+            onOpenApiKeyDialog={() => setApiKeyDialogOpen(true)}
+          />
+        ) : (
+          <Box
+            sx={{
+              height: '100dvh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 2,
+              px: 3,
+              textAlign: 'center',
+              userSelect: 'none',
+            }}
+          >
+            <CircularProgress size={48} sx={{ color: '#60A5FA' }} />
+            <Typography sx={{ color: '#FFFFFF', fontWeight: 800, fontSize: 18, letterSpacing: -0.2 }}>
+              正在載入全台氣象資料…
             </Typography>
-            <Typography
-              variant="caption"
-              sx={{ color: 'text.secondary', display: { xs: 'none', sm: 'block' }, fontSize: 13, fontWeight: 500 }}
-            >
-              中央氣象署各縣市鄉鎮 3 天逐 3 小時精準天氣預報
+            <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 500 }}>
+              中央氣象署 3 天逐 3 小時精準預報
             </Typography>
           </Box>
-
-          {/* 更新時間 Chip */}
-          {lastFetchedAt && !isMobile && (
-            <Chip
-              label={`資料時間 ${dayjs(lastFetchedAt).format('HH:mm')}`}
-              size="small"
-              variant="outlined"
+        )
+      ) : (
+        <>
+          {/* ── Top AppBar (桌面模式) ── */}
+          <AppBar
+            position="sticky"
+            elevation={0}
+            sx={{
+              background: 'rgba(10, 15, 30, 0.88)',
+              backdropFilter: 'blur(20px)',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              zIndex: 1100,
+            }}
+          >
+            <Toolbar
               sx={{
-                borderColor: 'rgba(255,255,255,0.25)',
-                color: '#CBD5E1',
-                fontSize: 13,
-                fontWeight: 600,
-                height: 28,
-                px: 0.5,
+                gap: { xs: 1, sm: 2 },
+                flexWrap: 'nowrap',
+                minHeight: { xs: 56, sm: 64 },
+                px: { xs: 1.5, sm: 3 },
               }}
-            />
-          )}
+            >
+              <WbSunnyIcon sx={{ color: '#FFD740', fontSize: { xs: 24, sm: 28 }, flexShrink: 0 }} />
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 800,
+                    letterSpacing: 0.5,
+                    fontSize: { xs: 16, sm: 20 },
+                    lineHeight: 1.2,
+                  }}
+                >
+                  台灣各縣市即時天氣
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'text.secondary', display: { xs: 'none', sm: 'block' }, fontSize: 13, fontWeight: 500 }}
+                >
+                  中央氣象署各縣市鄉鎮 3 天逐 3 小時精準天氣預報
+                </Typography>
+              </Box>
 
-          {/* API Key 設定按鈕 */}
-          <IconButton
-            onClick={() => setApiKeyDialogOpen(true)}
-            size="small"
-            title="設定氣象署個人 API Key (避免 429 限流)"
-            sx={{
-              color: localStorage.getItem('cwa_api_key') ? '#60A5FA' : 'text.secondary',
-              flexShrink: 0,
-              bgcolor: 'rgba(255,255,255,0.05)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-            }}
-          >
-            <VpnKeyIcon fontSize="small" />
-          </IconButton>
+              {/* 切換地區按鈕 (iOS 彈窗) */}
+              {cities.length > 0 && (
+                <Button
+                  onClick={() => setDesktopLocationModalOpen(true)}
+                  size="small"
+                  startIcon={<EditLocationAltIcon />}
+                  sx={{
+                    color: '#93C5FD',
+                    bgcolor: 'rgba(96,165,250,0.12)',
+                    border: '1px solid rgba(96,165,250,0.25)',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    px: 1.5,
+                    display: { xs: 'none', sm: 'inline-flex' },
+                    '&:hover': { bgcolor: 'rgba(96,165,250,0.2)' },
+                  }}
+                >
+                  切換地區
+                </Button>
+              )}
 
-          {/* 重新整理按鈕 */}
-          <IconButton
-            onClick={handleRefresh}
-            disabled={refreshing || cooldown > 0}
-            size="small"
-            title={cooldown > 0 ? `防刷冷卻中（剩餘 ${cooldown} 秒）` : '更新所有縣市資料'}
-            sx={{
-              color: cooldown > 0 ? 'text.disabled' : 'text.secondary',
-              flexShrink: 0,
-              bgcolor: 'rgba(255,255,255,0.05)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-            }}
-          >
-            {refreshing ? (
-              <CircularProgress size={16} sx={{ color: '#60A5FA' }} />
-            ) : (
-              <RefreshIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Toolbar>
-      </AppBar>
+              {/* iOS 模式切換按鈕 */}
+              {cities.length > 0 && (
+                <Button
+                  onClick={() => setViewModeOverride('ios')}
+                  size="small"
+                  startIcon={<PhoneIphoneIcon />}
+                  sx={{
+                    color: '#CBD5E1',
+                    bgcolor: 'rgba(255,255,255,0.06)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    px: 1.25,
+                    display: { xs: 'none', sm: 'inline-flex' },
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+                  }}
+                >
+                  iPhone 視圖
+                </Button>
+              )}
+
+              {/* 更新時間 Chip */}
+              {lastFetchedAt && !isMobile && (
+                <Chip
+                  label={`資料時間 ${dayjs(lastFetchedAt).format('HH:mm')}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    borderColor: 'rgba(255,255,255,0.25)',
+                    color: '#CBD5E1',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    height: 28,
+                    px: 0.5,
+                  }}
+                />
+              )}
+
+              {/* API Key 設定按鈕 */}
+              <IconButton
+                onClick={() => setApiKeyDialogOpen(true)}
+                size="small"
+                title="設定氣象署個人 API Key (避免 429 限流)"
+                sx={{
+                  color: localStorage.getItem('cwa_api_key') ? '#60A5FA' : 'text.secondary',
+                  flexShrink: 0,
+                  bgcolor: 'rgba(255,255,255,0.05)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+                }}
+              >
+                <VpnKeyIcon fontSize="small" />
+              </IconButton>
+
+              {/* 重新整理按鈕 */}
+              <IconButton
+                onClick={handleRefresh}
+                disabled={refreshing || cooldown > 0}
+                size="small"
+                title={cooldown > 0 ? `防刷冷卻中（剩餘 ${cooldown} 秒）` : '更新所有縣市資料'}
+                sx={{
+                  color: cooldown > 0 ? 'text.disabled' : 'text.secondary',
+                  flexShrink: 0,
+                  bgcolor: 'rgba(255,255,255,0.05)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+                }}
+              >
+                {refreshing ? (
+                  <CircularProgress size={16} sx={{ color: '#60A5FA' }} />
+                ) : (
+                  <RefreshIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Toolbar>
+          </AppBar>
 
       {/* ── 主容器：加入初次進入頁面優雅 FadeIn 特效 ── */}
       <Container
@@ -520,6 +615,18 @@ export default function WeatherPage() {
           </>
         )}
       </Container>
+    </>
+  )}
+
+  {/* ── 桌面版使用的地區切換彈窗 ── */}
+  <IOSLocationModal
+    open={desktopLocationModalOpen}
+    onClose={() => setDesktopLocationModalOpen(false)}
+    selectedCity={selectedCity}
+    selectedTownship={selectedTownship}
+    onSelectCityAndTownship={setSelectedCityAndTownship}
+    citiesData={cities}
+  />
 
       {/* ── API Key 設定彈跳視窗 ── */}
       <Dialog

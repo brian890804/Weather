@@ -27,3 +27,12 @@ export const CITIES: CityConfig[] = [
   { name: '金門縣', id: 'F-D0047-085' },
   { name: '連江縣（馬祖）', id: 'F-D0047-081' },
 ];
+
+export const REGIONS: { region: string; cities: string[] }[] = [
+  { region: '全部', cities: CITIES.map((c) => c.name) },
+  { region: '北部', cities: ['基隆市', '臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '宜蘭縣'] },
+  { region: '中部', cities: ['苗栗縣', '臺中市', '彰化縣', '南投縣', '雲林縣'] },
+  { region: '南部', cities: ['嘉義市', '嘉義縣', '臺南市', '高雄市', '屏東縣'] },
+  { region: '東部', cities: ['花蓮縣', '臺東縣'] },
+  { region: '離島', cities: ['澎湖縣', '金門縣', '連江縣（馬祖）'] },
+];

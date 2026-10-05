@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   assetsInclude: ["**/*.svg"],
-  base: process.env.NODE_ENV === "production" ? "/Weather/" : "/", // ← 本地用 /
+  base: "/",
   server: {
     port: 5173,
     host: "0.0.0.0",

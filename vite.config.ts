@@ -10,4 +10,11 @@ export default defineConfig({
     host: '0.0.0.0',
     strictPort: false,
   },
+  preview: {
+    port: 4173,
+    host: '0.0.0.0',
+  },
+  build: {
+    sourcemap: false,
+  },
 })

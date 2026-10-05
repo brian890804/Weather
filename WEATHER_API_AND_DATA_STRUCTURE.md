@@ -1,6 +1,6 @@
 # 台灣天氣預報系統 - API 呼叫制度、快取機制與資料結構完整規範文件
 
-本文件詳細說明本專案與中央氣象署（CWA）Open API 對接的呼叫制度、週期頻率、快取判斷機制以及前後端統一資料結構。
+本文件詳細說明本專案與中央氣象署（CWA）Open API 對接的呼叫制度、週期頻率、快取判斷機制、分批併發流控以及前後端統一資料結構。
 
 ---
 
@@ -8,58 +8,68 @@
 
 ### 1. 現行呼叫頻率與觸發制度
 
-本專案採用 **「6 小時時間視窗制度（6-Hour Window Scheduling）」**，對齊中央氣象署每日的 4 次主要預報更新節點：
+本專案採用 **「6 小時時間視窗制度（6-Hour Window Scheduling）」配合「3 小時保證保鮮期」**，對齊中央氣象署每日 4 次主要預報更新節點：
 
 * **時間視窗起點（UTC+8）**：`00:00`、`06:00`、`12:00`、`18:00`。
 * **視窗週期跨度**：每 **6 小時**（360 分鐘）為一個獨立的預報視窗。
+* **3 小時絕對保鮮期 (`MIN_FRESH_HOURS = 3`)**：無論何時進入，若上次抓取時間距今未滿 180 分鐘，系統保證直接讀取 Storage 暫存，發送 **0 個 API 請求**。
 
-```
+```text
 ┌───────────┬───────────┬───────────┬───────────┐
 │ 00:00視窗 │ 06:00視窗 │ 12:00視窗 │ 18:00視窗 │
 └───────────┴───────────┴───────────┴───────────┘
 ```
 
 #### 自動輪詢／排程觸發機制 (`msUntilNextWindow`)
-系統不會無節制地每分每秒發送 Request，而是精確計算當前時間距離下一個 6 小時整點起點的毫秒數：
+系統精確計算當前時間距離下一個 6 小時整點起點的毫秒數：
 $$\Delta t = \text{NextWindowStart} - \text{CurrentTime}$$
 * 範例：若使用者在 14:20 打開網頁，距離下一個視窗起點（18:00）尚有 3 小時 40 分鐘。系統會透過 `setTimeout` 設定在 18:00:00 自動喚醒並發出 `mutate()` 重新拉取新預報。
-* 重新拉取完成後，立即遞迴預約下一次視窗（24:00）的排程，達成真正的低耗能定時同步。
+* 重新拉取完成後，立即遞迴預約下一次視窗的排程，達成真正的低耗能定時同步。
 
 ---
 
 ### 2. 快取優先檢查機制 (`Cache-First`)
 
-為了防止使用者頻繁刷新頁面或切換元件導致 API 額度超載，系統結合了 **`localStorage` 本地儲存** 與 **SWR 資料請求快取**：
+為了防止使用者頻繁刷新頁面或切換元件導致 API 額度超載，系統結合了 **`localStorage` 本地壓縮儲存** 與 **SWR 資料請求快取**：
 
 1. **檢查快取有效性 (`isCacheValid`)**：
    * 檢查本地鍵值 `weather_cities_cache_v2`。
-   * 比對快取資料中的 `fetchedAt`（抓取時間戳記）是否落在當前 6 小時視窗內：
-     $$\text{WindowStart} \le \text{fetchedAt} < \text{WindowEnd}$$
+   * 比對快取資料中的 `fetchedAt`（抓取時間戳記）：
+     * **條件一（絕對保鮮）**：$\text{CurrentTime} - \text{fetchedAt} < 3\text{ 小時}$ $\rightarrow$ 直接判定有效。
+     * **條件二（視窗對齊）**：$\text{WindowStart} \le \text{fetchedAt} < \text{WindowEnd}$ $\rightarrow$ 判定有效。
+     * 只有當「既超過 3 小時，又已跨入下一個 6hr 視窗」時，才判定過期。
 2. **快取有效時（命中 Cache）**：
    * `getSWRKey()` 回傳 `null`。
    * **完全跳過任何網路 Request，發送 0 個 API 請求**。
    * 直接將快取資料灌入 Zustand 全域 Store，實現「零延遲、首屏秒開」。
 3. **快取無效／過期／初次造訪時**：
    * `getSWRKey()` 啟用 `'ALL_CITIES_WEATHER_DATA'`。
-   * 觸發網路請求發送，獲取成功後自動寫入 `localStorage`，記錄最新的 `fetchedAt`。
+   * 觸發網路請求發送，獲取成功後自動壓縮寫入 `localStorage`，記錄最新的 `fetchedAt`。
 
 ---
 
-### 3. 單次抓取規模與併發架構 (`Promise.all`)
+### 3. 分批拉取架構與防 429 限流機制 (`Batch Fetching`)
 
 * **呼叫來源**：交通部中央氣象署開放資料平台（CWA OpenData API）。
-* **資料集代碼**：`F-D0047-001` ～ `F-D0047-085`（包含台灣 22 個縣市之鄉鎮天氣預報）。
-* **併發處理**：
-  每次執行網路抓取時，前端以 `Promise.all` **同時併發發出 22 個 HTTP GET 請求**：
+* **資料集代碼**：
+  * 全台 22 縣市鄉鎮 3 天逐 3 小時預報：`F-D0047-001` ～ `F-D0047-085`。
+  * 全台未來 1 週逐 12 小時預報：`F-D0047-091`（單一輕量請求）。
+* **分批並發控制 (Batch Size = 3)**：
+  為避免一次同時發送 22 支 API 觸發氣象署 WAF 429 拒絕服務，系統改採每批 3 支併發，批次間微間隔 250ms：
   ```ts
-  const promises = CITIES.map(async (city) => {
-    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${city.id}?Authorization=${AUTH_KEY}`;
-    const res = await axios.get<ApiResponse>(url);
-    return parseCityApiResponse(res.data, city.name, city.id);
-  });
-  const allCitiesData = await Promise.all(promises);
+  const BATCH_SIZE = 3;
+  for (let i = 0; i < CITIES.length; i += BATCH_SIZE) {
+    const batch = CITIES.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map((city) => fetchCity(city));
+    await Promise.all(batchPromises);
+    if (i + BATCH_SIZE < CITIES.length) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
   ```
-  這確保了全台 22 縣市的天氣預報資料具備完全一致的時間基準。
+* **429 降級保護與冷卻機制**：
+  * 若偵測到 429 限流，自動啟動 5 分鐘冷卻保護 (`setRateLimitCooldown(5)`)。
+  * 冷卻期內或請求失敗時，自動降級使用現有的本地快取資料，確保使用者介面不崩潰。
 
 ---
 
@@ -73,10 +83,11 @@ $$\Delta t = \text{NextWindowStart} - \text{CurrentTime}$$
 
 ### 5. 手動強制更新機制 (`Manual Refresh`)
 
-* 使用者點擊頂部導航列的「重新整理」按鈕時：
-  1. 呼叫 `clearCache()` 移除 `localStorage` 中的快取記錄。
+* **防刷間隔保護**：手動更新具備冷卻計時保護（預設 10 分鐘內按鈕顯示冷卻中，避免暴力連點）。
+* 使用者點擊「重新整理」按鈕時：
+  1. 呼叫 `clearCache()` 與 `clearRateLimitCooldown()`。
   2. 呼叫 SWR 的 `refetch()` (`mutate()`)。
-  3. 強制併發重新向中央氣象署請求 22 個縣市資料並刷新全站狀態。
+  3. 平滑分批重新向中央氣象署請求全台資料並刷新全站狀態。
 
 ---
 
@@ -85,24 +96,29 @@ $$\Delta t = \text{NextWindowStart} - \text{CurrentTime}$$
 ```mermaid
 flowchart TD
     Start([使用者造訪 / 開啟頁面]) --> ReadStorage[讀取 localStorage: weather_cities_cache_v2]
-    ReadStorage --> CheckValid{isCacheValid ?<br/>fetchedAt 在當前 6hr 視窗內?}
+    ReadStorage --> CheckValid{isCacheValid ?<br/>未滿3小時 或 在當前6hr視窗內?}
     
     CheckValid -- 是 (快取有效) --> LoadCache[直接載入快取至 Zustand Store]
     LoadCache --> SWRNull[SWR Key = null: 跳過網路請求]
     SWRNull --> CalcNext[計算距下個視窗毫秒數 msUntilNextWindow]
     
-    CheckValid -- 否 (無快取或跨時段) --> FetchAPI[Promise.all 併發發送 22 縣市 API 請求]
-    FetchAPI --> Parse[解析為 ParsedCityData 統一資料模型]
-    Parse --> WriteCache[寫入 localStorage 並記錄 fetchedAt]
+    CheckValid -- 否 (無快取或逾期) --> Check429{是否處於429冷卻中?}
+    Check429 -- 是 --> FallbackCache[使用本地備援快取]
+    Check429 -- 否 --> FetchBatch[分批併發拉取: 每批3縣市 + 250ms間隔]
+    
+    FetchBatch --> Parse[解析為 ParsedCityData 統一資料模型]
+    Parse --> Compress[packData: 壓縮陣列化資料]
+    Compress --> WriteCache[寫入 localStorage 並記錄 fetchedAt]
     WriteCache --> UpdateStore[更新 Zustand Store 全域狀態]
+    FallbackCache --> UpdateStore
     UpdateStore --> CalcNext
     
     CalcNext --> SetTimeout[設定 setTimeout 定時器]
-    SetTimeout --> NextWindow{到達下一個整點視窗<br/>00:00, 06:00, 12:00, 18:00?}
-    NextWindow -- 是 --> FetchAPI
+    SetTimeout --> NextWindow{到達下一個整點視窗?}
+    NextWindow -- 是 --> FetchBatch
     
-    UserClick([使用者點擊手動重新整理]) --> ClearCache[clearCache: 清空 localStorage]
-    ClearCache --> FetchAPI
+    UserClick([使用者點擊手動重新整理]) --> ClearCache[清空快取與冷卻標記]
+    ClearCache --> FetchBatch
 ```
 
 ---
@@ -161,7 +177,7 @@ export interface ApiResponse {
 ### 2. 前端解析後的正規化資料模型 (Normalized Domain Model)
 
 #### (1) `WeatherPeriod`（單一 3 小時預報核心結構）
-將氣象署深層嵌套的 `WeatherElement` 解析展平成單一平鋪的高效物件：
+將氣象署深層嵌套的 `WeatherElement` 解析展平成平鋪物件：
 
 ```ts
 export interface WeatherPeriod {
@@ -181,7 +197,7 @@ export interface WeatherPeriod {
   probabilityOfPrecipitation: string; // 3 小時降雨機率 (%)
   
   // ── 舒適度 ──
-  maxComfortIndex: string;            // 舒適度指數數值 (如 24)
+  maxComfortIndex: string;            // 舒適度指數數值
   maxComfortIndexDescription: string; // 舒適度描述 (舒適 / 偏涼 / 悶熱 / 寒冷)
   minComfortIndex: string;            // 最低舒適度指數
   minComfortIndexDescription: string; // 最低舒適度描述
@@ -193,7 +209,7 @@ export interface WeatherPeriod {
   
   // ── 天氣現象 ──
   weather: string;                    // 天氣名稱 (晴時多雲 / 短暫陣雨 等)
-  weatherCode: string;                // 氣象局天氣代碼 (如 01, 02) -> 用於對應 SVG 動態圖示
+  weatherCode: string;                // 氣象署天氣代碼 -> 對應 Meteocons SVG 動態圖示
   weatherDescription: string;         // 天氣預報綜合描述文字
   
   // ── 紫外線 ──
@@ -202,7 +218,22 @@ export interface WeatherPeriod {
 }
 ```
 
-#### (2) `ParsedTownshipData`（鄉鎮層級）
+#### (2) `WeeklyForecastDay`（未來 7 天一週預報結構）
+```ts
+export interface WeeklyForecastDay {
+  dateStr: string;                    // 日期字串 (YYYY-MM-DD)
+  dayLabel?: string;                  // 星期幾 (如「週一」)
+  minTemp: number;                    // 當日最低溫
+  maxTemp: number;                    // 當日最高溫
+  maxPop: number;                     // 當日最高降雨機率
+  weather: string;                    // 天氣現象
+  weatherCode: string;                // 天氣代碼
+  description: string;                // 預報描述
+  startTime: string;                  // 代表時段起點
+}
+```
+
+#### (3) `ParsedTownshipData` & `ParsedCityData`
 ```ts
 export interface ParsedTownshipData {
   townshipName: string;               // 鄉鎮市區名稱 (如「新店區」)
@@ -211,49 +242,49 @@ export interface ParsedTownshipData {
   longitude: string;                  // 經度座標
   periods: WeatherPeriod[];           // 未來 3 天逐 3 小時預報陣列 (約 24 個時段)
 }
-```
 
-#### (3) `ParsedCityData`（縣市層級）
-```ts
 export interface ParsedCityData {
   cityName: string;                   // 縣市名稱 (如「新北市」)
-  datasetId: string;                  // 氣象局資料代碼 (如「F-D0047-069」)
+  datasetId: string;                  // 氣象署資料代碼 (如「F-D0047-069」)
   townships: ParsedTownshipData[];    // 轄下鄉鎮區清單
 }
 ```
 
-#### (4) `CachedData`（本地快取結構）
+#### (4) `CachedData`（本地快取與壓縮儲存）
 ```ts
 export interface CachedData {
-  fetchedAt: string;                  // 資料拉取時的 ISO 8601 時間字串
-  cities: ParsedCityData[];           // 全台 22 縣市完整預報資料
+  fetchedAt: string;                                   // 資料拉取時的 ISO 8601 時間字串
+  cities: ParsedCityData[];                            // 全台 22 縣市完整預報資料
+  weeklyForecasts?: Record<string, WeeklyForecastDay[]>; // 未來 7 天各縣市預報
 }
 ```
+*註：寫入 LocalStorage 前會由 `packData()` 將 `WeatherPeriod` 的物件 Key 轉換為純陣列索引序列，使 5MB+ 的資料大幅縮減至 1.4MB 以內。*
 
 ---
 
 ### 3. Zustand 全域狀態結構 (`weatherStore`)
 
-負責管理全域當前選擇、分頁切換與時段對應：
-
 ```ts
 export interface WeatherState {
   // 資料集
   cities: ParsedCityData[];
-  setCities: (cities: ParsedCityData[]) => void;
+  setCities: (data: ParsedCityData[]) => void;
+  weeklyForecasts: Record<string, WeeklyForecastDay[]>;
+  setWeeklyForecasts: (forecasts: Record<string, WeeklyForecastDay[]>) => void;
   
   // 當前選取縣市與鄉鎮
   selectedCity: string;               // 預設 '臺北市'
-  setSelectedCity: (city: string) => void;
+  setSelectedCity: (cityName: string) => void;
   selectedTownship: string;           // 預設 '' (自動選取該縣市第 1 個鄉鎮)
-  setSelectedTownship: (township: string) => void;
+  setSelectedTownship: (townshipName: string) => void;
+  setSelectedCityAndTownship: (cityName: string, townshipName: string) => void;
   
   // 當前瀏覽 Tab 分類
   activeTab: TabCategory;             // 'overview' | 'temperature' | 'wind' | 'rain' | 'comfort'
   setActiveTab: (tab: TabCategory) => void;
   
-  // 當前點擊聚焦的時段起點時間戳
-  selectedPeriodTime: string | null;  // 為 null 時自動對應系統當前時刻所屬時段
+  // 當前選取時段
+  selectedPeriodTime: string | null;  // null = 自動對應系統當前時段
   setSelectedPeriodTime: (time: string | null) => void;
   
   // 狀態與時間戳
@@ -265,26 +296,3 @@ export interface WeatherState {
   setError: (error: string | null) => void;
 }
 ```
-
----
-
-## 肆、全系統圖形化 (圓形圖) 視覺規範總結
-
-為消除傳統純文字條列、提升視覺美感並放大易讀性，本專案已完成以下視覺革新：
-
-1. **溫度維度 (`TemperaturePanel`)**：
-   * 移除原本單調的橫向線條條狀圖（線條圖）。
-   * 改用精緻的 **SVG 圓形進度環 (`CircularGauge`)**：
-     * Hero 頂部：170px 大型即時氣溫圓形儀表 + 4 個 110px 圓形統計指標（最高溫、最低溫、體感溫度、露點溫度）。
-     * 逐時時段：每張時段卡片配置 3 顆圓形圖（預估氣溫環、體感溫度環、露點溫度環），色彩隨溫度動態漸變。
-2. **舒適度維度 (`ComfortPanel`)**：
-   * 告別純文字與小型 Chip 條列。
-   * 全面導入 **圓形舒適度指數儀表 (`CircularGauge`)**：
-     * Hero 頂部：170px 舒適度圓形環 + 舒適度指數環、體感溫環、相對濕度環。
-     * 逐時時段：配置 3 顆圓形指標（舒適度狀態環、體感溫度環、相對濕度環）。
-3. **降雨與風況維度 (`RainPanel`, `WindPanel`)**：
-   * 降雨 Tab 採用降雨率圓形環、濕度圓形環與紫外線/露點圓形環。
-   * 風況 Tab 結合風向動態導航羅盤與風速/蒲福風級圓形儀表，確保全系統視覺語言高度一致。
-4. **字體全面放大優化**：
-   * 移除全站 11px 小字，次要說明文字提升至 13px～14.5px。
-   * 卡片標題提升至 16px～18px，主要數值採用 20px～38px+ 加粗顯示，不論在手機或大螢幕均清晰醒目。

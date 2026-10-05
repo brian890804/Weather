@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ParsedCityData } from '../types/weather';
+import type { ParsedCityData, WeeklyForecastDay } from '../types/weather';
 
 export type TabCategory = 'overview' | 'temperature' | 'wind' | 'rain' | 'comfort';
 
@@ -42,6 +42,10 @@ interface WeatherState {
   // 所有縣市資料
   cities: ParsedCityData[];
   setCities: (data: ParsedCityData[]) => void;
+
+  // 未來 7 天預報 (以縣市名為 Key)
+  weeklyForecasts: Record<string, WeeklyForecastDay[]>;
+  setWeeklyForecasts: (forecasts: Record<string, WeeklyForecastDay[]>) => void;
 
   // 選中的縣市 (大 Tab)
   selectedCity: string;
@@ -101,6 +105,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       selectedTownship: newTownshipName,
     });
   },
+
+  weeklyForecasts: {},
+  setWeeklyForecasts: (forecasts) => set({ weeklyForecasts: forecasts }),
 
   selectedCity: loadSavedCity(),
   setSelectedCity: (cityName: string) => {

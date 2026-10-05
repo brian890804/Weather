@@ -4,6 +4,7 @@ import type {
   ParsedCityData,
   ParsedTownshipData,
   WeatherPeriod,
+  WeeklyForecastDay,
 } from '../types/weather';
 
 /** 取得指定 ElementName 在特定時間點的值 (支援 DataTime 或 StartTime) */
@@ -104,3 +105,70 @@ export function parseCityApiResponse(
     townships,
   };
 }
+
+/** 解析 F-D0047-091 全台 22 縣市未來 1 週逐 12 小時天氣預報 */
+export function parseWeeklyForecastResponse(api: any): Record<string, WeeklyForecastDay[]> {
+  const locations = api?.records?.Locations?.[0]?.Location ?? [];
+  const weeklyMap: Record<string, WeeklyForecastDay[]> = {};
+
+  locations.forEach((loc: any) => {
+    const locName: string = loc.LocationName;
+    const wxEl = loc.WeatherElement?.find((e: any) => e.ElementName === '天氣現象');
+    const maxTEl = loc.WeatherElement?.find((e: any) => e.ElementName === '最高溫度');
+    const minTEl = loc.WeatherElement?.find((e: any) => e.ElementName === '最低溫度');
+    const popEl = loc.WeatherElement?.find((e: any) => e.ElementName === '12小時降雨機率');
+    const descEl = loc.WeatherElement?.find((e: any) => e.ElementName === '天氣預報綜合描述');
+
+    if (!wxEl?.Time) return;
+
+    const dayMap: Record<string, WeeklyForecastDay> = {};
+
+    for (let i = 0; i < wxEl.Time.length; i++) {
+      const t = wxEl.Time[i];
+      const st: string = t.StartTime || '';
+      const dateStr = st.substring(0, 10);
+      if (!dateStr) continue;
+
+      if (!dayMap[dateStr]) {
+        dayMap[dateStr] = {
+          dateStr,
+          minTemp: 99,
+          maxTemp: -99,
+          maxPop: 0,
+          weather: '',
+          weatherCode: '01',
+          description: '',
+          startTime: st,
+        };
+      }
+
+      const minT = parseInt(minTEl?.Time?.[i]?.ElementValue?.[0]?.MinTemperature) || 99;
+      const maxT = parseInt(maxTEl?.Time?.[i]?.ElementValue?.[0]?.MaxTemperature) || -99;
+      const pop = parseInt(popEl?.Time?.[i]?.ElementValue?.[0]?.ProbabilityOfPrecipitation) || 0;
+      const wx = t.ElementValue?.[0]?.Weather || '';
+      const wxCode = t.ElementValue?.[0]?.WeatherCode || '01';
+      const desc = descEl?.Time?.[i]?.ElementValue?.[0]?.WeatherDescription || '';
+
+      if (minT < dayMap[dateStr].minTemp) dayMap[dateStr].minTemp = minT;
+      if (maxT > dayMap[dateStr].maxTemp) dayMap[dateStr].maxTemp = maxT;
+      if (pop > dayMap[dateStr].maxPop) dayMap[dateStr].maxPop = pop;
+
+      const hour = parseInt(st.substring(11, 13)) || 0;
+      // 優先使用白天的天氣現象與描述 (06:00 ~ 18:00)
+      if (!dayMap[dateStr].weather || (hour >= 6 && hour < 18)) {
+        dayMap[dateStr].weather = wx;
+        dayMap[dateStr].weatherCode = wxCode;
+        dayMap[dateStr].description = desc;
+      }
+    }
+
+    const days = Object.values(dayMap).slice(0, 7);
+    weeklyMap[locName] = days;
+    if (locName === '連江縣') {
+      weeklyMap['連江縣（馬祖）'] = days;
+    }
+  });
+
+  return weeklyMap;
+}
+

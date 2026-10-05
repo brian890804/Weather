@@ -41,8 +41,14 @@ import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
 import EditLocationAltIcon from '@mui/icons-material/EditLocationAlt';
 import { R } from '../App';
-import IOSScrollSnapWeather from '../components/ios/IOSScrollSnapWeather';
+import MobileWeather from '../mobile/MobileWeather';
 import IOSLocationModal from '../components/ios/IOSLocationModal';
+import {
+  readCache,
+  isRateLimited,
+  getMinutesSinceFetched,
+  MANUAL_REFRESH_MIN_INTERVAL_MINUTES,
+} from '../utils/cache';
 
 dayjs.locale('zh-tw');
 
@@ -141,15 +147,35 @@ export default function WeatherPage() {
 
   const handleRefresh = useCallback(async () => {
     if (refreshing || cooldown > 0) return;
+
+    // 1. 與 storage 內的時間對比：若快取仍在防刷期內，不打 API
+    const cache = readCache();
+    const minutesAgo = getMinutesSinceFetched(cache?.fetchedAt);
+
+    if (minutesAgo < MANUAL_REFRESH_MIN_INTERVAL_MINUTES) {
+      setSnackbarMsg(
+        `氣象預報於 ${minutesAgo === 0 ? '剛剛' : `${minutesAgo} 分鐘前`} 已更新過，目前仍為最新資料，無需頻繁請求（防止氣象署 429 限流）`
+      );
+      setCooldown(5);
+      return;
+    }
+
+    // 2. 若處於 429 限流冷卻保護中，提示使用者
+    if (isRateLimited()) {
+      setSnackbarMsg('氣象署 API 目前處於 429 限流冷卻保護中，已為您保留快取資料。請稍候再試或設定個人 API Key');
+      setCooldown(10);
+      return;
+    }
+
     setRefreshing(true);
     try {
-      // 絕不先清空快取！遵守 Stale-While-Revalidate 原則
+      // 遵守 Stale-While-Revalidate 原則
       await refetch();
       setSnackbarMsg('預報資料已成功更新！');
     } catch (err: any) {
       console.warn('Refresh error:', err);
       if (err?.response?.status === 429 || String(err).includes('429')) {
-        setSnackbarMsg('氣象署 API 請求頻率受限 (429)，已為您保留現有快取資料');
+        setSnackbarMsg('氣象署 API 請求頻率受限 (429)，已啟動冷卻保護並保留現有快取資料');
       } else {
         setSnackbarMsg('連線異常，已保留現有天氣快取資料');
       }
@@ -185,7 +211,7 @@ export default function WeatherPage() {
       {/* ── 手機與 iOS 模式：全屏 3 頁上下滑動貼合 (Scroll Snap) 現代化氣象體驗 ── */}
       {isIOSView ? (
         cities.length > 0 ? (
-          <IOSScrollSnapWeather
+          <MobileWeather
             cities={cities}
             selectedCity={selectedCity}
             selectedTownship={selectedTownship || currentTownshipData?.townshipName || townships[0]?.townshipName || '全區'}
@@ -202,6 +228,38 @@ export default function WeatherPage() {
             cooldown={cooldown}
             onOpenApiKeyDialog={() => setApiKeyDialogOpen(true)}
           />
+        ) : error ? (
+          <Box
+            sx={{
+              height: '100dvh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 2,
+              px: 3,
+              textAlign: 'center',
+            }}
+          >
+            <Alert
+              severity="warning"
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => setApiKeyDialogOpen(true)}
+                  sx={{ fontWeight: 700 }}
+                >
+                  設定 API Key
+                </Button>
+              }
+              sx={{ maxWidth: 450, borderRadius: `${R.md}px`, textAlign: 'left' }}
+            >
+              {String(error).includes('429')
+                ? '中央氣象署 API 存取頻率受限 (429 Too Many Requests)。公共金鑰已被限流，請點擊按鈕填寫個人免費 API Key！'
+                : `無法取得氣象資料：${error}`}
+            </Alert>
+          </Box>
         ) : (
           <Box
             sx={{
@@ -390,8 +448,23 @@ export default function WeatherPage() {
 
         {/* 錯誤提示 */}
         {error && !isLoading && cities.length === 0 && (
-          <Alert severity="error" sx={{ mb: 3, borderRadius: `${R.md}px` }}>
-            取得天氣資料失敗：{error}
+          <Alert
+            severity="warning"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => setApiKeyDialogOpen(true)}
+                sx={{ fontWeight: 700 }}
+              >
+                設定個人 API Key
+              </Button>
+            }
+            sx={{ mb: 3, borderRadius: `${R.md}px` }}
+          >
+            {String(error).includes('429')
+              ? '氣象署 API 存取頻率受限 (429 Too Many Requests)。公共金鑰已被限流，請點擊按鈕填寫個人免費金鑰！'
+              : `取得天氣資料失敗：${error}`}
           </Alert>
         )}
 

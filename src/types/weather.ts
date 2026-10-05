@@ -95,8 +95,22 @@ export interface ParsedCityData {
   [key: string]: any;
 }
 
+export interface WeeklyForecastDay {
+  dateStr: string;
+  dayLabel?: string;
+  minTemp: number;
+  maxTemp: number;
+  maxPop: number;
+  weather: string;
+  weatherCode: string;
+  description: string;
+  startTime: string;
+}
+
 export interface CachedData {
   fetchedAt: string; // ISO string
   cities: ParsedCityData[];
+  weeklyForecasts?: Record<string, WeeklyForecastDay[]>;
   [key: string]: any;
 }
+

@@ -60,6 +60,10 @@ export default function MobilePage1({
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
+        "@media (min-height: 900px)": {
+          justifyContent: "space-between",
+          pt: "max(20vh, env(safe-area-inset-top, 16px))",
+        },
         boxSizing: "border-box",
         px: { xs: 2, sm: 2.5 },
         pt: "env(safe-area-inset-top, 16px)",

@@ -3,10 +3,39 @@ import dayjs from "dayjs";
 import ThermostatIcon from "@mui/icons-material/Thermostat";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import AirIcon from "@mui/icons-material/Air";
+import NavigationIcon from "@mui/icons-material/Navigation";
 import type { WeatherPeriod } from "../types/weather";
 import type { DayForecast, HudMetricItem, ActiveDayDetails } from "./types";
 import { useWeatherStore } from "../store/weatherStore";
 import { computeActiveDayDetails } from "./dayDetailsHelper";
+
+function getWindDegree(dir: string): number {
+  if (!dir) return 0;
+  const d = dir.trim();
+  if (d.includes("北") && d.includes("東")) return 45;
+  if (d.includes("南") && d.includes("東")) return 135;
+  if (d.includes("南") && d.includes("西")) return 225;
+  if (d.includes("北") && d.includes("西")) return 315;
+  if (d.includes("北")) return 0;
+  if (d.includes("東")) return 90;
+  if (d.includes("南")) return 180;
+  if (d.includes("西")) return 270;
+  return 0;
+}
+
+function getWindCardinal(dir: string): string {
+  if (!dir) return "--";
+  const d = dir.trim();
+  if (d.includes("北") && d.includes("東")) return "東北";
+  if (d.includes("南") && d.includes("東")) return "東南";
+  if (d.includes("南") && d.includes("西")) return "西南";
+  if (d.includes("北") && d.includes("西")) return "西北";
+  if (d.includes("北")) return "北";
+  if (d.includes("東")) return "東";
+  if (d.includes("南")) return "南";
+  if (d.includes("西")) return "西";
+  return "--";
+}
 
 interface UseMobileWeatherDataParams {
   selectedCity: string;
@@ -36,7 +65,7 @@ export function useMobileWeatherData({
     if (cityWeekly && cityWeekly.length > 0) {
       return cityWeekly.slice(0, 7).map((day) => {
         const preFix =
-          day.dateStr === today ? "今天" : day.dateStr === tmr ? "明天" : "";
+          day.dateStr === today ? "今天 " : day.dateStr === tmr ? "明天 " : "";
         const lbl = `${preFix}${dayjs(day.dateStr).format("M/D (dd)")}`;
         return {
           ...day,
@@ -149,7 +178,8 @@ export function useMobileWeatherData({
     const appTemp = Number(period.maxApparentTemperature) || 20;
     const tempPercent = Math.min(100, Math.max(15, (appTemp / 40) * 100));
     const popVal = parseInt(popStr) || 0;
-    const humVal = parseInt(period.relativeHumidity) || 0;
+    const windDir = period.windDirection || "偏東風";
+    const windDirDeg = getWindDegree(windDir);
     const windVal = parseFloat(period.windSpeed) || 0;
     const windPercent = Math.min(100, Math.max(15, (windVal / 15) * 100));
 
@@ -175,14 +205,21 @@ export function useMobileWeatherData({
         miniIcon: React.createElement(WaterDropIcon, { sx: { fontSize: 18 } }),
       },
       {
-        key: "humidity",
-        label: "濕度",
-        subLabel: "相對濕度",
-        value: `${period.relativeHumidity}%`,
-        percent: Math.min(100, Math.max(10, humVal)),
+        key: "windDirection",
+        label: "風向",
+        subLabel: "風向方位",
+        value: getWindCardinal(windDir),
+        percent: 85,
         neonColor: "#00FF9F",
         neonGlow: "rgba(0, 255, 159, 0.7)",
-        miniIcon: React.createElement(WaterDropIcon, { sx: { fontSize: 18 } }),
+        miniIcon: React.createElement(NavigationIcon, {
+          sx: {
+            fontSize: 26,
+            transform: `rotate(${windDirDeg}deg)`,
+            filter: "drop-shadow(0 0 6px #00FF9F)",
+            transition: "transform 0.4s ease",
+          },
+        }),
       },
       {
         key: "windSpeed",

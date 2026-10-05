@@ -123,6 +123,7 @@ function packData(data: CachedData) {
       })),
     })),
     wf: data.weeklyForecasts,
+    rt: data.realtimeTemps,
   };
 }
 
@@ -151,6 +152,7 @@ function unpackData(packed: any): CachedData | null {
     fetchedAt: packed.fetchedAt,
     cities,
     weeklyForecasts: packed.wf || packed.weeklyForecasts || undefined,
+    realtimeTemps: packed.rt || packed.realtimeTemps || undefined,
   };
 }
 

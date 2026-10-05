@@ -27,20 +27,6 @@ export default function MobileHudMetrics({
           from: { transform: "rotate(0deg)" },
           to: { transform: "rotate(360deg)" },
         },
-        // 原本顏色與高亮霓虹光暈之間平滑呼吸 (不變暗)
-        "@keyframes iconBreatheGlow": {
-          "0%, 100%": {
-            opacity: 1,
-            filter: "drop-shadow(0 0 1px var(--glowColor))",
-            transform: "scale(1)",
-          },
-          "50%": {
-            opacity: 1,
-            filter:
-              "drop-shadow(0 0 6px var(--glowColor)) drop-shadow(0 0 14px var(--glowColor))",
-            transform: "scale(1.05)",
-          },
-        },
       }}
     >
       {metrics.map((item) => (
@@ -130,7 +116,7 @@ export default function MobileHudMetrics({
                 lineHeight: 1,
               }}
             >
-              {/* Icon 本身（無額外外框或背景圈，純向量輪廓漸顯呼吸發亮） */}
+              {/* Icon 本身（無呼吸燈動畫，呈現穩定清爽發光質感） */}
               <Box
                 sx={{
                   color: item.neonColor,
@@ -138,8 +124,7 @@ export default function MobileHudMetrics({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  animation: "iconBreatheGlow 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite",
-                  "--glowColor": item.neonColor,
+                  filter: `drop-shadow(0 0 4px ${item.neonColor}66)`,
                   "& svg": {
                     overflow: "visible",
                   },

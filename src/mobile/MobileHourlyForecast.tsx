@@ -87,11 +87,13 @@ export default function MobileHourlyForecast({
                 py: "8px",
                 px: "2px",
                 gap: "2px",
-                bgcolor: isSel ? `${sky.neonPrimary}22` : "transparent",
+                background: isSel
+                  ? `linear-gradient(135deg, ${sky.neonPrimary}38 0%, ${sky.neonSecondary}1f 100%)`
+                  : sky.cardItemGradient,
                 border: isSel
-                  ? `1px solid ${sky.neonPrimary}8c`
-                  : "1px solid transparent",
-                boxShadow: isSel ? `0 0 12px ${sky.neonPrimary}40` : "none",
+                  ? `1px solid ${sky.neonPrimary}99`
+                  : `1px solid ${sky.dimBorder}`,
+                boxShadow: isSel ? `0 0 14px ${sky.neonPrimary}4d` : "0 2px 6px rgba(0,0,0,0.18)",
                 cursor: "pointer",
                 transition: "all 0.15s ease",
                 WebkitTapHighlightColor: "transparent",

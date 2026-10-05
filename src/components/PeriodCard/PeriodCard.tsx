@@ -28,6 +28,7 @@ import {
   comfortColor,
 } from '../../utils/weatherUtils';
 import { R } from '../../App';
+import { useWeatherStore } from '../../store/weatherStore';
 import React from 'react';
 
 dayjs.locale('zh-tw');
@@ -55,6 +56,11 @@ function PeriodCardBase({
   onSelect,
   category = 'overview',
 }: PeriodCardProps) {
+  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const realtimeTemp = realtimeTemps[selectedCity];
+  const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
+
   const start = dayjs(period.startTime);
   const end = dayjs(period.endTime);
   const isNightPeriod = start.hour() >= 18 || start.hour() < 6;
@@ -172,11 +178,11 @@ function PeriodCardBase({
             <Stack spacing={1.2}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                  <ThermostatIcon sx={{ fontSize: 20, color: tempColor(period.temperature) }} />
+                  <ThermostatIcon sx={{ fontSize: 20, color: tempColor(displayTemp) }} />
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>氣溫</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 900, color: tempColor(period.temperature), fontSize: { xs: 17, sm: 19 } }}>
-                  {period.temperature}°C
+                <Typography sx={{ fontWeight: 900, color: tempColor(displayTemp), fontSize: { xs: 17, sm: 19 } }}>
+                  {displayTemp}°C
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
@@ -350,11 +356,11 @@ function PeriodCardBase({
               {/* 溫度 */}
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                  <ThermostatIcon sx={{ fontSize: 20, color: tempColor(period.temperature) }} />
+                  <ThermostatIcon sx={{ fontSize: 20, color: tempColor(displayTemp) }} />
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>氣溫</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 900, color: tempColor(period.temperature), fontSize: { xs: 16.5, sm: 18 } }}>
-                  {period.temperature}°C
+                <Typography sx={{ fontWeight: 900, color: tempColor(displayTemp), fontSize: { xs: 16.5, sm: 18 } }}>
+                  {displayTemp}°C
                 </Typography>
               </Stack>
 

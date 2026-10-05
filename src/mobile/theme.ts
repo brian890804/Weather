@@ -22,6 +22,10 @@ export function getSkyTheme(
       glassBorder: "rgba(56, 189, 248, 0.35)",
       dimGlass: "rgba(7, 16, 30, 0.60)",
       dimBorder: "rgba(56, 189, 248, 0.18)",
+      cardGradient:
+        "linear-gradient(135deg, rgba(56, 189, 248, 0.16) 0%, rgba(13, 26, 45, 0.75) 45%, rgba(7, 14, 27, 0.85) 100%)",
+      cardItemGradient:
+        "linear-gradient(135deg, rgba(56, 189, 248, 0.14) 0%, rgba(22, 38, 61, 0.40) 60%, rgba(13, 26, 45, 0.25) 100%)",
       textPrimary: "#FFFFFF",
       textSecondary: "rgba(186, 230, 253, 0.75)",
       accentText: "#38BDF8",
@@ -43,6 +47,10 @@ export function getSkyTheme(
       glassBorder: "rgba(129, 140, 248, 0.35)",
       dimGlass: "rgba(12, 17, 39, 0.60)",
       dimBorder: "rgba(129, 140, 248, 0.18)",
+      cardGradient:
+        "linear-gradient(135deg, rgba(129, 140, 248, 0.16) 0%, rgba(17, 23, 53, 0.75) 45%, rgba(10, 14, 31, 0.85) 100%)",
+      cardItemGradient:
+        "linear-gradient(135deg, rgba(192, 132, 252, 0.14) 0%, rgba(26, 32, 70, 0.40) 60%, rgba(17, 23, 53, 0.25) 100%)",
       textPrimary: "#FFFFFF",
       textSecondary: "rgba(224, 231, 255, 0.75)",
       accentText: "#A5B4FC",
@@ -64,6 +72,10 @@ export function getSkyTheme(
       glassBorder: "rgba(192, 132, 252, 0.35)",
       dimGlass: "rgba(15, 17, 34, 0.60)",
       dimBorder: "rgba(192, 132, 252, 0.18)",
+      cardGradient:
+        "linear-gradient(135deg, rgba(192, 132, 252, 0.18) 0%, rgba(26, 30, 54, 0.75) 45%, rgba(15, 19, 34, 0.85) 100%)",
+      cardItemGradient:
+        "linear-gradient(135deg, rgba(192, 132, 252, 0.14) 0%, rgba(42, 40, 78, 0.40) 60%, rgba(26, 30, 54, 0.25) 100%)",
       textPrimary: "#FFFFFF",
       textSecondary: "rgba(233, 213, 255, 0.75)",
       accentText: "#E879F9",
@@ -85,6 +97,10 @@ export function getSkyTheme(
       glassBorder: "rgba(56, 189, 248, 0.35)",
       dimGlass: "rgba(11, 26, 48, 0.60)",
       dimBorder: "rgba(56, 189, 248, 0.18)",
+      cardGradient:
+        "linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(24, 51, 84, 0.75) 45%, rgba(15, 32, 56, 0.85) 100%)",
+      cardItemGradient:
+        "linear-gradient(135deg, rgba(56, 189, 248, 0.14) 0%, rgba(36, 73, 115, 0.40) 60%, rgba(24, 51, 84, 0.25) 100%)",
       textPrimary: "#FFFFFF",
       textSecondary: "rgba(224, 242, 254, 0.75)",
       accentText: "#7DD3FC",
@@ -106,6 +122,10 @@ export function getSkyTheme(
       glassBorder: "rgba(125, 211, 252, 0.32)",
       dimGlass: "rgba(16, 28, 44, 0.60)",
       dimBorder: "rgba(125, 211, 252, 0.16)",
+      cardGradient:
+        "linear-gradient(135deg, rgba(125, 211, 252, 0.16) 0%, rgba(32, 53, 78, 0.75) 45%, rgba(22, 36, 54, 0.85) 100%)",
+      cardItemGradient:
+        "linear-gradient(135deg, rgba(148, 163, 184, 0.14) 0%, rgba(46, 73, 106, 0.40) 60%, rgba(32, 53, 78, 0.25) 100%)",
       textPrimary: "#FFFFFF",
       textSecondary: "rgba(226, 232, 240, 0.75)",
       accentText: "#BAE6FD",
@@ -126,6 +146,10 @@ export function getSkyTheme(
     glassBorder: "rgba(251, 191, 36, 0.38)",
     dimGlass: "rgba(32, 17, 4, 0.60)",
     dimBorder: "rgba(251, 191, 36, 0.20)",
+    cardGradient:
+      "linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, rgba(74, 41, 6, 0.78) 45%, rgba(43, 24, 3, 0.88) 100%)",
+    cardItemGradient:
+      "linear-gradient(135deg, rgba(249, 115, 22, 0.18) 0%, rgba(120, 53, 15, 0.45) 60%, rgba(74, 41, 6, 0.25) 100%)",
     textPrimary: "#FFFFFF",
     textSecondary: "rgba(254, 243, 199, 0.80)",
     accentText: "#FDE68A",

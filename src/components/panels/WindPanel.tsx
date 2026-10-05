@@ -49,7 +49,7 @@ function WindCompass({ direction, size = 80 }: { direction: string; size?: numbe
           lineHeight: 1,
         }}
       >
-        N
+        北
       </Typography>
       <Typography
         variant="caption"
@@ -62,7 +62,7 @@ function WindCompass({ direction, size = 80 }: { direction: string; size?: numbe
           lineHeight: 1,
         }}
       >
-        S
+        南
       </Typography>
       <Typography
         variant="caption"
@@ -75,7 +75,7 @@ function WindCompass({ direction, size = 80 }: { direction: string; size?: numbe
           lineHeight: 1,
         }}
       >
-        W
+        西
       </Typography>
       <Typography
         variant="caption"
@@ -88,7 +88,7 @@ function WindCompass({ direction, size = 80 }: { direction: string; size?: numbe
           lineHeight: 1,
         }}
       >
-        E
+        東
       </Typography>
 
       {/* 羅盤指針 (帶滑順旋轉與微幅彈性動畫) */}

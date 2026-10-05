@@ -9,6 +9,7 @@ import WeatherIcon from "../components/WeatherIcon/WeatherIcon";
 import MobileHudMetrics from "./MobileHudMetrics";
 import MobileHourlyForecast from "./MobileHourlyForecast";
 import type { HudMetricItem, SkyTheme } from "./types";
+import { useWeatherStore } from "../store/weatherStore";
 
 interface MobilePage1Props {
   active: boolean;
@@ -43,6 +44,11 @@ export default function MobilePage1({
   onGoToPage2,
   sky,
 }: MobilePage1Props) {
+  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const isViewingCurrent = !selectedPeriodTime || selectedPeriodTime === autoCurrentPeriod?.startTime;
+  const realtimeTemp = realtimeTemps[selectedCity];
+  const displayHeroTemp = (isViewingCurrent && realtimeTemp) ? realtimeTemp : period?.temperature;
+
   return (
     <Box
       sx={{
@@ -162,7 +168,7 @@ export default function MobilePage1({
                 textShadow: `0 0 24px ${sky.neonPrimary}47, 0 2px 10px rgba(0,0,0,0.22)`,
               }}
             >
-              {period.temperature}°
+              {displayHeroTemp}°
             </Typography>
           </Box>
 

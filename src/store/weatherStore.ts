@@ -74,12 +74,18 @@ interface WeatherState {
   error: string | null;
   setError: (msg: string | null) => void;
 
+  // 即測即時站點溫度 (以縣市名為 Key，例如 '臺北市': '25')
+  realtimeTemps: Record<string, string>;
+  setRealtimeTemps: (temps: Record<string, string>) => void;
+
   // 上次更新時間
   lastFetchedAt: string | null;
   setLastFetchedAt: (t: string | null) => void;
 }
 
 export const useWeatherStore = create<WeatherState>((set, get) => ({
+  realtimeTemps: {},
+  setRealtimeTemps: (temps) => set({ realtimeTemps: temps }),
   cities: [],
   setCities: (data) => {
     const currentCity = get().selectedCity;

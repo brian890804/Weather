@@ -19,6 +19,7 @@ import DragScrollBox from '../common/DragScrollBox';
 import type { WeatherPeriod } from '../../types/weather';
 import { tempColor, popColor, beaufortLabel } from '../../utils/weatherUtils';
 import { R } from '../../App';
+import { useWeatherStore } from '../../store/weatherStore';
 
 interface CircleStatProps {
   value: string;
@@ -166,16 +167,23 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
   const start = dayjs(period.startTime);
   const pop = period.probabilityOfPrecipitation;
 
+  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const now = dayjs();
+  const isCurrent = now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime));
+  const realtimeTemp = realtimeTemps[selectedCity];
+  const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
+
   const circleStats = useMemo(() => (
     <>
       {/* 1. 氣溫 */}
       <CircleStat
-        value={period.temperature}
+        value={displayTemp}
         unit="°C"
         label="實測氣溫"
         icon={<ThermostatIcon fontSize="inherit" />}
-        color={tempColor(period.temperature)}
-        subtext="現場溫度"
+        color={tempColor(displayTemp)}
+        subtext={isCurrent && realtimeTemp ? '即測站點真實現況' : '預報氣溫'}
       />
 
       {/* 2. 體感溫度 */}
@@ -247,7 +255,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         subtext={`指數 ${period.minComfortIndex}`}
       />
     </>
-  ), [period, pop]);
+  ), [period, pop, displayTemp, isCurrent, realtimeTemp]);
 
   return (
     <Box
@@ -329,13 +337,13 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
               variant="h1"
               sx={{
                 fontWeight: 900,
-                color: tempColor(period.temperature),
+                color: tempColor(displayTemp),
                 fontSize: { xs: 40, sm: 54, md: 72 },
                 lineHeight: 1,
                 my: { xs: 0.25, sm: 0.5 },
               }}
             >
-              {period.temperature}°C
+              {displayTemp}°C
             </Typography>
 
             <Typography

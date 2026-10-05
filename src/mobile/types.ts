@@ -17,10 +17,6 @@ export interface MobileWeatherProps {
   selectedPeriodTime: string | null;
   onSelectPeriod: (startTime: string) => void;
   lastFetchedAt: string | null;
-  onRefresh: () => void;
-  refreshing: boolean;
-  cooldown: number;
-  onOpenApiKeyDialog: () => void;
 }
 
 export interface DayForecast {
@@ -46,6 +42,8 @@ export interface SkyTheme {
   glassBorder: string;
   dimGlass: string;
   dimBorder: string;
+  cardGradient: string;
+  cardItemGradient: string;
   textPrimary: string;
   textSecondary: string;
   accentText: string;

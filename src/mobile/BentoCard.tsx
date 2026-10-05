@@ -30,7 +30,7 @@ export default function BentoCard({
       sx={{
         p: "14px 12px",
         borderRadius: "10px",
-        bgcolor: sky.dimGlass,
+        background: sky.cardItemGradient,
         border: `1px solid ${sky.dimBorder}`,
         backdropFilter: "blur(20px)",
         display: "flex",

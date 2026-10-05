@@ -23,12 +23,12 @@ export default function MobileSevenDayList({
   return (
     <Box
       sx={{
-        borderRadius: "10px",
-        bgcolor: sky.dimGlass,
+        borderRadius: "12px",
+        background: sky.cardGradient,
         border: `1px solid ${sky.neonPrimary}4d`,
         boxShadow: `0 0 24px ${sky.neonPrimary}14`,
         backdropFilter: "blur(20px)",
-        p: "14px",
+        p: { xs: "12px 10px", sm: "16px 14px" },
         flexShrink: 0,
       }}
     >
@@ -41,48 +41,50 @@ export default function MobileSevenDayList({
               key={day.dateStr}
               onClick={() => onSelectForecastDate(day.dateStr)}
               sx={{
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "1.15fr 0.85fr 1fr 1fr",
                 alignItems: "center",
-                justifyContent: "space-between",
-                py: "15px",
-                px: "10px",
+                py: "14px",
+                px: { xs: "8px", sm: "12px" },
                 borderRadius: "8px",
-                bgcolor: isSelected ? `${sky.neonPrimary}24` : "transparent",
+                background: isSelected
+                  ? `linear-gradient(135deg, ${sky.neonPrimary}33 0%, ${sky.neonSecondary}1a 100%)`
+                  : sky.cardItemGradient,
                 border: `1px solid ${
-                  isSelected ? `${sky.neonPrimary}80` : `${sky.neonPrimary}14`
+                  isSelected ? `${sky.neonPrimary}99` : `${sky.neonPrimary}18`
                 }`,
                 boxShadow: isSelected
-                  ? `0 0 12px ${sky.neonPrimary}38`
-                  : "none",
+                  ? `0 0 14px ${sky.neonPrimary}3d`
+                  : "0 2px 6px rgba(0,0,0,0.15)",
                 cursor: "pointer",
                 transition:
                   "background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease",
                 WebkitTapHighlightColor: "transparent",
-                "&:active": { opacity: 0.75 },
+                "&:active": { opacity: 0.75, transform: "scale(0.98)" },
               }}
             >
-              {/* 1. 日期與星期 (固定寬度對齊) */}
-              <Box sx={{ width: 68, flexShrink: 0 }}>
+              {/* 1. 日期與星期 (左側自然對齊，不擁擠不碰圖示) */}
+              <Box sx={{ display: "flex", alignItems: "center", minWidth: 0, pr: 0.5 }}>
                 <Typography
                   sx={{
-                    fontSize: 14.5,
+                    fontSize: { xs: 13.5, sm: 14.5 },
                     fontWeight: 800,
                     color: isSelected ? sky.neonPrimary : sky.textPrimary,
                     whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
                   {day.dayLabel}
                 </Typography>
               </Box>
 
-              {/* 2. 天氣圖示 (固定寬度居中對齊) */}
+              {/* 2. 天氣圖示 (居中均分) */}
               <Box
                 sx={{
-                  width: 36,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  flexShrink: 0,
                 }}
               >
                 <WeatherIcon
@@ -92,20 +94,18 @@ export default function MobileSevenDayList({
                 />
               </Box>
 
-              {/* 3. 降雨 / 濕度機率 (固定寬度對齊) */}
+              {/* 3. 降雨 / 濕度機率 (居中均分) */}
               <Box
                 sx={{
-                  width: 60,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  flexShrink: 0,
                 }}
               >
                 {day.maxPop > 0 ? (
                   <Typography
                     sx={{
-                      fontSize: 12.5,
+                      fontSize: { xs: 12.5, sm: 13 },
                       fontWeight: 800,
                       color: sky.neonPrimary,
                       fontFamily: "monospace, sans-serif",
@@ -120,7 +120,7 @@ export default function MobileSevenDayList({
                   <Typography
                     sx={{
                       fontSize: 12,
-                      color: "rgba(255, 255, 255, 0.2)",
+                      color: "rgba(255, 255, 255, 0.25)",
                       fontFamily: "monospace, sans-serif",
                       textAlign: "center",
                     }}
@@ -130,10 +130,9 @@ export default function MobileSevenDayList({
                 )}
               </Box>
 
-              {/* 4. 最高最低氣溫 (固定寬度右對齊) */}
+              {/* 4. 最高最低氣溫 (右側嚴格對齊) */}
               <Box
                 sx={{
-                  flex: 1,
                   display: "flex",
                   justifyContent: "flex-end",
                   alignItems: "center",
@@ -141,7 +140,7 @@ export default function MobileSevenDayList({
               >
                 <Typography
                   sx={{
-                    fontSize: 14.5,
+                    fontSize: { xs: 13.5, sm: 14.5 },
                     fontWeight: 800,
                     color: sky.textPrimary,
                     fontFamily: "monospace, sans-serif",
@@ -159,18 +158,18 @@ export default function MobileSevenDayList({
 
       {/* 選中日期的預報詳情說明卡 */}
       {activeDayDetails?.description && (
-        <Box
-          sx={{
-            mt: "10px",
-            p: "10px 12px",
-            borderRadius: "8px",
-            bgcolor: "rgba(255, 255, 255, 0.08)",
-            border: `1px solid ${sky.dimBorder}`,
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "8px",
-          }}
-        >
+          <Box
+            sx={{
+              mt: "12px",
+              p: "12px 14px",
+              borderRadius: "8px",
+              background: sky.cardItemGradient,
+              border: `1px solid ${sky.dimBorder}`,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "8px",
+            }}
+          >
           <Box sx={{ flex: 1 }}>
             <Typography
               sx={{

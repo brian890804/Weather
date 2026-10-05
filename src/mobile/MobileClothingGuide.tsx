@@ -19,12 +19,12 @@ export default function MobileClothingGuide({
   return (
     <Box
       sx={{
-        borderRadius: "10px",
-        bgcolor: sky.dimGlass,
+        borderRadius: "12px",
+        background: sky.cardGradient,
         border: `1px solid ${sky.neonPrimary}4d`,
         boxShadow: `0 0 24px ${sky.neonPrimary}14`,
         backdropFilter: "blur(20px)",
-        p: "14px",
+        p: { xs: "12px 10px", sm: "16px 14px" },
         flexShrink: 0,
       }}
     >
@@ -89,7 +89,7 @@ export default function MobileClothingGuide({
             sx={{
               p: "10px 12px",
               borderRadius: "8px",
-              bgcolor: sky.dimGlass,
+              background: sky.cardItemGradient,
               border: `1px solid ${sky.dimBorder}`,
               boxShadow: `0 0 10px ${sky.neonPrimary}0f`,
             }}

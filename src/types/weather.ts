@@ -111,6 +111,7 @@ export interface CachedData {
   fetchedAt: string; // ISO string
   cities: ParsedCityData[];
   weeklyForecasts?: Record<string, WeeklyForecastDay[]>;
+  realtimeTemps?: Record<string, string>;
   [key: string]: any;
 }
 

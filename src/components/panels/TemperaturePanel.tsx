@@ -3,9 +3,11 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
 import { tempColor, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
+import { useWeatherStore } from '../../store/weatherStore';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
 
@@ -32,6 +34,16 @@ export default function TemperaturePanel({
   onSelectPeriod,
   autoCurrentPeriodStartTime,
 }: TemperaturePanelProps) {
+  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const now = dayjs();
+  const isCurrent = currentPeriod
+    ? currentPeriod.startTime === autoCurrentPeriodStartTime ||
+      (now.isAfter(dayjs(currentPeriod.startTime)) && now.isBefore(dayjs(currentPeriod.endTime)))
+    : false;
+  const realtimeTemp = realtimeTemps[selectedCity];
+  const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : currentPeriod?.temperature;
+
   return (
     <Box>
       {/* 目前選中時段溫度 hero */}
@@ -69,7 +81,7 @@ export default function TemperaturePanel({
           >
             <Box
               component="img"
-              src={getWeatherIconUrl(getTemperatureIconName(currentPeriod.temperature))}
+              src={getWeatherIconUrl(getTemperatureIconName(displayTemp ?? ''))}
               alt="氣溫狀況"
               sx={{
                 width: { xs: 56, sm: 72 },
@@ -82,10 +94,12 @@ export default function TemperaturePanel({
             />
           </Box>
           <Box>
-            <Typography variant="h2" sx={{ fontWeight: 800, color: tempColor(currentPeriod.temperature), lineHeight: 1 }}>
-              {currentPeriod.temperature}°C
+            <Typography variant="h2" sx={{ fontWeight: 800, color: tempColor(displayTemp ?? ''), lineHeight: 1 }}>
+              {displayTemp}°C
             </Typography>
-            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>氣溫狀況</Typography>
+            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
+              {isCurrent && realtimeTemp ? '即測站點真實現況' : '氣溫狀況'}
+            </Typography>
           </Box>
           <Stack spacing={0.5}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>

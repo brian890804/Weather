@@ -28,10 +28,6 @@ export default function MobileWeather({
   selectedPeriodTime,
   onSelectPeriod,
   lastFetchedAt,
-  onRefresh,
-  refreshing,
-  cooldown,
-  onOpenApiKeyDialog,
 }: MobileWeatherProps) {
   const [activePage, setActivePage] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);

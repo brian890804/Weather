@@ -23,13 +23,13 @@ import 'dayjs/locale/zh-tw';
 import { useWeatherStore, type TabCategory } from '../store/weatherStore';
 import { useWeatherData } from '../hooks/useWeatherData';
 import { CITIES } from '../utils/cities';
-import PeriodCard from '../components/PeriodCard/PeriodCard';
+import PeriodCard from '../components/desktop/PeriodCard';
 import DragScrollBox from '../components/common/DragScrollBox';
-import OverviewPanel from '../components/panels/OverviewPanel';
-import TemperaturePanel from '../components/panels/TemperaturePanel';
-import WindPanel from '../components/panels/WindPanel';
-import RainPanel from '../components/panels/RainPanel';
-import ComfortPanel from '../components/panels/ComfortPanel';
+import OverviewPanel from '../components/desktop/OverviewPanel';
+import TemperaturePanel from '../components/desktop/TemperaturePanel';
+import WindPanel from '../components/desktop/WindPanel';
+import RainPanel from '../components/desktop/RainPanel';
+import ComfortPanel from '../components/desktop/ComfortPanel';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -61,7 +61,7 @@ const TAB_CONFIG: { value: TabCategory; label: string }[] = [
 ];
 
 export default function WeatherPage() {
-  const { isLoading, error, refetch } = useWeatherData();
+  const { isLoading, error, refetch, refetchRealtime } = useWeatherData();
   const {
     cities,
     selectedCity,
@@ -148,18 +148,6 @@ export default function WeatherPage() {
   const handleRefresh = useCallback(async () => {
     if (refreshing || cooldown > 0) return;
 
-    // 1. 與 storage 內的時間對比：若快取仍在防刷期內，不打 API
-    const cache = readCache();
-    const minutesAgo = getMinutesSinceFetched(cache?.fetchedAt);
-
-    if (minutesAgo < MANUAL_REFRESH_MIN_INTERVAL_MINUTES) {
-      setSnackbarMsg(
-        `氣象預報於 ${minutesAgo === 0 ? '剛剛' : `${minutesAgo} 分鐘前`} 已更新過，目前仍為最新資料，無需頻繁請求（防止氣象署 429 限流）`
-      );
-      setCooldown(5);
-      return;
-    }
-
     // 2. 若處於 429 限流冷卻保護中，提示使用者
     if (isRateLimited()) {
       setSnackbarMsg('氣象署 API 目前處於 429 限流冷卻保護中，已為您保留快取資料。請稍候再試或設定個人 API Key');
@@ -169,9 +157,21 @@ export default function WeatherPage() {
 
     setRefreshing(true);
     try {
+      const cache = readCache();
+      const minutesAgo = getMinutesSinceFetched(cache?.fetchedAt);
+
+      if (minutesAgo < MANUAL_REFRESH_MIN_INTERVAL_MINUTES) {
+        // 預報資料仍新鮮，但即測氣溫 (O-A0001-001) 必定立即重新拉取最新數值！
+        await refetchRealtime();
+        setSnackbarMsg('即測氣溫已更新為最新測站數據！預報模型資料仍為最新狀態。');
+        setCooldown(5);
+        return;
+      }
+
       // 遵守 Stale-While-Revalidate 原則
       await refetch();
-      setSnackbarMsg('預報資料已成功更新！');
+      setSnackbarMsg('預報與即測氣溫資料已成功更新！');
+      setCooldown(15);
     } catch (err: any) {
       console.warn('Refresh error:', err);
       if (err?.response?.status === 429 || String(err).includes('429')) {
@@ -179,11 +179,11 @@ export default function WeatherPage() {
       } else {
         setSnackbarMsg('連線異常，已保留現有天氣快取資料');
       }
+      setCooldown(15); // 15秒冷卻防刷
     } finally {
       setRefreshing(false);
-      setCooldown(15); // 15秒冷卻防刷
     }
-  }, [refetch, refreshing, cooldown]);
+  }, [refetch, refetchRealtime, refreshing, cooldown]);
 
   const handleSaveApiKey = useCallback(() => {
     try {
@@ -223,10 +223,6 @@ export default function WeatherPage() {
             selectedPeriodTime={selectedPeriodTime}
             onSelectPeriod={handleSelectPeriod}
             lastFetchedAt={lastFetchedAt}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-            cooldown={cooldown}
-            onOpenApiKeyDialog={() => setApiKeyDialogOpen(true)}
           />
         ) : error ? (
           <Box

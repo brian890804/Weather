@@ -27,6 +27,7 @@ export default function MobileWeather({
   autoCurrentPeriod,
   selectedPeriodTime,
   onSelectPeriod,
+  lastFetchedAt,
   onRefresh,
   refreshing,
   cooldown,
@@ -159,10 +160,6 @@ export default function MobileWeather({
           selectedCity={selectedCity}
           selectedTownship={selectedTownship}
           onOpenLocation={() => setLocationOpen(true)}
-          onOpenApiKeyDialog={onOpenApiKeyDialog}
-          onRefresh={onRefresh}
-          refreshing={refreshing}
-          cooldown={cooldown}
           period={period}
           dayHighLow={dayHighLow}
           page1Metrics={page1Metrics}
@@ -170,6 +167,7 @@ export default function MobileWeather({
           autoCurrentPeriod={autoCurrentPeriod}
           selectedPeriodTime={selectedPeriodTime}
           onSelectPeriod={onSelectPeriod}
+          lastFetchedAt={lastFetchedAt}
           onGoToPage2={() => goTo(1)}
           sky={sky}
         />

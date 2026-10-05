@@ -116,17 +116,18 @@ export default function MobilePage2({
             >
               <Typography
                 sx={{
-                  fontSize: 14,
+                  fontSize: 17,
                   fontWeight: 800,
                   color: "#FFFFFF",
-                  letterSpacing: 0.3,
+                  letterSpacing: 0.6,
+                  textShadow: `0 0 12px ${sky.neonPrimary}66`,
                 }}
               >
                 📊 {activeDayDetails.dayLabel} 氣象指標
               </Typography>
               <Typography
                 sx={{
-                  fontSize: 11.5,
+                  fontSize: 12,
                   color: sky.neonPrimary,
                   fontWeight: 700,
                   fontFamily: "monospace, sans-serif",

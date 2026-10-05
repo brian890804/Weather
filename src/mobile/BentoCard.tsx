@@ -46,18 +46,6 @@ export default function BentoCard({
         "&:active": onClick ? { transform: "scale(0.97)" } : {},
       }}
     >
-      {/* 頂部科技感彩色微標記線 */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 12,
-          right: 12,
-          height: "2px",
-          background: `linear-gradient(90deg, ${iconColor} 0%, transparent 80%)`,
-          opacity: 0.85,
-        }}
-      />
       <Box
         sx={{ display: "flex", alignItems: "center", gap: "8px", mt: "2px" }}
       >

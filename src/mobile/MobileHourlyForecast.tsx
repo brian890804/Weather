@@ -188,6 +188,7 @@ export default function MobileHourlyForecast({
               {/* 5. 氣溫 */}
               <Box
                 sx={{
+                  width: "100%",
                   height: 22,
                   display: "flex",
                   alignItems: "center",
@@ -196,11 +197,12 @@ export default function MobileHourlyForecast({
               >
                 <Typography
                   sx={{
+                    width: "100%",
+                    textAlign: "center",
                     fontSize: 16.5,
                     fontWeight: 800,
                     color: sky.textPrimary,
                     lineHeight: 1,
-                    fontFamily: "monospace, sans-serif",
                   }}
                 >
                   {p.temperature}°

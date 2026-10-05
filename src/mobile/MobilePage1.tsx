@@ -1,27 +1,20 @@
 import React from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import IconButton from "@mui/material/IconButton";
-import CircularProgress from "@mui/material/CircularProgress";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import VpnKeyIcon from "@mui/icons-material/VpnKey";
-import RefreshIcon from "@mui/icons-material/Refresh";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
+import dayjs from "dayjs";
 import type { WeatherPeriod } from "../types/weather";
 import WeatherIcon from "../components/WeatherIcon/WeatherIcon";
 import MobileHudMetrics from "./MobileHudMetrics";
 import MobileHourlyForecast from "./MobileHourlyForecast";
 import type { HudMetricItem, SkyTheme } from "./types";
-import LocationOnIcon from "@mui/icons-material/LocationOn";
 
 interface MobilePage1Props {
   active: boolean;
   selectedCity: string;
   selectedTownship: string;
   onOpenLocation: () => void;
-  onOpenApiKeyDialog: () => void;
-  onRefresh: () => void;
-  refreshing: boolean;
-  cooldown: number;
   period: WeatherPeriod | null;
   dayHighLow: { max: string; min: string };
   page1Metrics: HudMetricItem[];
@@ -29,6 +22,7 @@ interface MobilePage1Props {
   autoCurrentPeriod: WeatherPeriod | null;
   selectedPeriodTime: string | null;
   onSelectPeriod: (startTime: string) => void;
+  lastFetchedAt?: string | null;
   onGoToPage2: () => void;
   sky: SkyTheme;
 }
@@ -38,10 +32,6 @@ export default function MobilePage1({
   selectedCity,
   selectedTownship,
   onOpenLocation,
-  onOpenApiKeyDialog,
-  onRefresh,
-  refreshing,
-  cooldown,
   period,
   dayHighLow,
   page1Metrics,
@@ -49,6 +39,7 @@ export default function MobilePage1({
   autoCurrentPeriod,
   selectedPeriodTime,
   onSelectPeriod,
+  lastFetchedAt,
   onGoToPage2,
   sky,
 }: MobilePage1Props) {
@@ -207,7 +198,7 @@ export default function MobilePage1({
               flexShrink: 0,
             }}
           >
-            {/* 地點選單（無 icon，風格與整體氣象排版統一，帶有科技感點選虛線） */}
+            {/* 地點選單 */}
             <Box
               onClick={onOpenLocation}
               sx={{
@@ -240,6 +231,29 @@ export default function MobilePage1({
               </Typography>
               <LocationOnIcon sx={{ color: "#fff", fontSize: 22 }} />
             </Box>
+          </Box>
+
+          {/* 最後更新數據時間 */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 16,
+              mb: 0.25,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: 11,
+                color: "rgba(255, 255, 255, 0.45)",
+                fontWeight: 500,
+                letterSpacing: 0.3,
+                fontFamily: "monospace, sans-serif",
+              }}
+            >
+              最後更新數據時間: {lastFetchedAt ? dayjs(lastFetchedAt).format("HH:mm") : dayjs().format("HH:mm")}
+            </Typography>
           </Box>
         </Box>
       )}

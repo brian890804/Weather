@@ -61,27 +61,28 @@ export default function MobileSevenDayList({
                 "&:active": { opacity: 0.75 },
               }}
             >
-              {/* 日期與星期 */}
-              <Box sx={{ minWidth: 72 }}>
+              {/* 1. 日期與星期 (固定寬度對齊) */}
+              <Box sx={{ width: 68, flexShrink: 0 }}>
                 <Typography
                   sx={{
                     fontSize: 14.5,
                     fontWeight: 800,
                     color: isSelected ? sky.neonPrimary : sky.textPrimary,
+                    whiteSpace: "nowrap",
                   }}
                 >
                   {day.dayLabel}
                 </Typography>
               </Box>
 
-              {/* 天氣圖案與文字 */}
+              {/* 2. 天氣圖示 (固定寬度居中對齊) */}
               <Box
                 sx={{
+                  width: 36,
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
-                  flex: 1,
-                  px: 1,
+                  justifyContent: "center",
+                  flexShrink: 0,
                 }}
               >
                 <WeatherIcon
@@ -89,49 +90,68 @@ export default function MobileSevenDayList({
                   weather={day.weather}
                   size={28}
                 />
-                {/* 降雨機率 */}
-                <Box sx={{ width: 54, textAlign: "right" }}>
-                  {day.maxPop > 0 ? (
-                    <Typography
-                      sx={{
-                        fontSize: 12.5,
-                        fontWeight: 800,
-                        color: sky.neonPrimary,
-                        fontFamily: "monospace, sans-serif",
-                        textShadow: `0 0 8px ${sky.neonPrimary}99`,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      💧{day.maxPop}%
-                    </Typography>
-                  ) : (
-                    <Typography
-                      sx={{
-                        fontSize: 12,
-                        color: "rgba(255, 255, 255, 0.2)",
-                        fontFamily: "monospace, sans-serif",
-                      }}
-                    >
-                      -
-                    </Typography>
-                  )}
-                </Box>
               </Box>
 
-              {/* 氣溫 */}
-              <Typography
+              {/* 3. 降雨 / 濕度機率 (固定寬度對齊) */}
+              <Box
                 sx={{
-                  width: 82,
-                  fontSize: 14.5,
-                  fontWeight: 800,
-                  color: sky.textPrimary,
-                  textAlign: "right",
-                  fontFamily: "monospace, sans-serif",
-                  whiteSpace: "nowrap",
+                  width: 60,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
                 }}
               >
-                {day.maxTemp}° / {day.minTemp}°
-              </Typography>
+                {day.maxPop > 0 ? (
+                  <Typography
+                    sx={{
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      color: sky.neonPrimary,
+                      fontFamily: "monospace, sans-serif",
+                      textShadow: `0 0 8px ${sky.neonPrimary}99`,
+                      whiteSpace: "nowrap",
+                      textAlign: "center",
+                    }}
+                  >
+                    💧{day.maxPop}%
+                  </Typography>
+                ) : (
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      color: "rgba(255, 255, 255, 0.2)",
+                      fontFamily: "monospace, sans-serif",
+                      textAlign: "center",
+                    }}
+                  >
+                    -
+                  </Typography>
+                )}
+              </Box>
+
+              {/* 4. 最高最低氣溫 (固定寬度右對齊) */}
+              <Box
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                }}
+              >
+                <Typography
+                  sx={{
+                    fontSize: 14.5,
+                    fontWeight: 800,
+                    color: sky.textPrimary,
+                    fontFamily: "monospace, sans-serif",
+                    whiteSpace: "nowrap",
+                    textAlign: "right",
+                  }}
+                >
+                  {day.maxTemp}° / {day.minTemp}°
+                </Typography>
+              </Box>
             </Box>
           );
         })}

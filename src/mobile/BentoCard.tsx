@@ -35,7 +35,7 @@ export default function BentoCard({
         backdropFilter: "blur(20px)",
         display: "flex",
         flexDirection: "column",
-        gap: "6px",
+        gap: "10px",
         position: "relative",
         overflow: "hidden",
         cursor: onClick ? "pointer" : "default",
@@ -76,9 +76,9 @@ export default function BentoCard({
         </Box>
         <Typography
           sx={{
-            fontSize: 12.5,
+            fontSize: 16,
             fontWeight: 700,
-            color: sky.textSecondary,
+            color: "#FFF",
             letterSpacing: 0.5,
           }}
         >
@@ -91,7 +91,6 @@ export default function BentoCard({
           fontWeight: 800,
           color: sky.textPrimary,
           lineHeight: 1.1,
-          fontFamily: "monospace, sans-serif",
           letterSpacing: -0.5,
           textShadow: `0 0 10px ${iconColor}44`,
         }}
@@ -102,7 +101,7 @@ export default function BentoCard({
         <Typography
           noWrap
           sx={{
-            fontSize: 11.5,
+            fontSize: 14,
             color: sky.textSecondary,
             fontWeight: 500,
             letterSpacing: 0.2,

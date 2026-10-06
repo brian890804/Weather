@@ -125,16 +125,6 @@ export default function MobilePage2({
               >
                 📊 {activeDayDetails.dayLabel} 氣象指標
               </Typography>
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  color: sky.neonPrimary,
-                  fontWeight: 700,
-                  fontFamily: "monospace, sans-serif",
-                }}
-              >
-                {dayjs(activeDayDetails.dateStr).format("YYYY/MM/DD")}
-              </Typography>
             </Box>
             <Box
               sx={{

@@ -67,7 +67,7 @@ export default function MobileSevenDayList({
               <Box sx={{ display: "flex", alignItems: "center", minWidth: 0, pr: 0.5 }}>
                 <Typography
                   sx={{
-                    fontSize: { xs: 13.5, sm: 14.5 },
+                    fontSize: { xs: 15.5, sm: 16.5 },
                     fontWeight: 800,
                     color: isSelected ? sky.neonPrimary : sky.textPrimary,
                     whiteSpace: "nowrap",
@@ -90,7 +90,7 @@ export default function MobileSevenDayList({
                 <WeatherIcon
                   weatherCode={day.weatherCode}
                   weather={day.weather}
-                  size={28}
+                  size={40}
                 />
               </Box>
 
@@ -105,10 +105,9 @@ export default function MobileSevenDayList({
                 {day.maxPop > 0 ? (
                   <Typography
                     sx={{
-                      fontSize: { xs: 12.5, sm: 13 },
+                      fontSize: { xs: 14.5, sm: 16 },
                       fontWeight: 800,
                       color: sky.neonPrimary,
-                      fontFamily: "monospace, sans-serif",
                       textShadow: `0 0 8px ${sky.neonPrimary}99`,
                       whiteSpace: "nowrap",
                       textAlign: "center",
@@ -119,9 +118,8 @@ export default function MobileSevenDayList({
                 ) : (
                   <Typography
                     sx={{
-                      fontSize: 12,
+                      fontSize: { xs: 14.5, sm: 16 },
                       color: "rgba(255, 255, 255, 0.25)",
-                      fontFamily: "monospace, sans-serif",
                       textAlign: "center",
                     }}
                   >
@@ -140,10 +138,9 @@ export default function MobileSevenDayList({
               >
                 <Typography
                   sx={{
-                    fontSize: { xs: 13.5, sm: 14.5 },
+                    fontSize: { xs: 15.5, sm: 16.5 },
                     fontWeight: 800,
                     color: sky.textPrimary,
-                    fontFamily: "monospace, sans-serif",
                     whiteSpace: "nowrap",
                     textAlign: "right",
                   }}
@@ -173,7 +170,7 @@ export default function MobileSevenDayList({
           <Box sx={{ flex: 1 }}>
             <Typography
               sx={{
-                fontSize: 12.5,
+                fontSize: 16,
                 fontWeight: 700,
                 color: sky.accentText,
                 mb: "3px",
@@ -184,7 +181,7 @@ export default function MobileSevenDayList({
             </Typography>
             <Typography
               sx={{
-                fontSize: 12.5,
+                fontSize: 15,
                 color: sky.textPrimary,
                 lineHeight: 1.5,
               }}

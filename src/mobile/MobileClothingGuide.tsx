@@ -96,8 +96,8 @@ export default function MobileClothingGuide({
           >
             <Typography
               sx={{
-                fontSize: 12,
-                color: sky.textSecondary,
+                fontSize: 14,
+                color: "#FFF",
                 fontWeight: 600,
                 mb: "3px",
                 letterSpacing: 0.4,
@@ -107,10 +107,9 @@ export default function MobileClothingGuide({
             </Typography>
             <Typography
               sx={{
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: 800,
                 color: tip.color,
-                fontFamily: "monospace, sans-serif",
               }}
             >
               {tip.value}

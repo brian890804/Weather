@@ -59,6 +59,7 @@ export default function MobileHourlyForecast({
         sx={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           px: "4px",
           mb: "10px",
         }}
@@ -73,6 +74,40 @@ export default function MobileHourlyForecast({
         >
           ⏱️ 逐 3 小時預報
         </Typography>
+
+        {selectedPeriodTime && autoCurrentPeriod && selectedPeriodTime !== autoCurrentPeriod.startTime && (
+          <Box
+            onClick={() => onSelectPeriod(autoCurrentPeriod.startTime)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              px: "9px",
+              py: "3px",
+              borderRadius: "20px",
+              background: sky.cardItemGradient || "linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)",
+              border: `1px solid ${sky.dimBorder || "rgba(255,255,255,0.18)"}`,
+              backdropFilter: "blur(8px)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+              WebkitTapHighlightColor: "transparent",
+              "&:active": { transform: "scale(0.95)" },
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: sky.textPrimary || "#FFF",
+                lineHeight: 1.2,
+                letterSpacing: 0.2,
+              }}
+            >
+              ↩ 回到現在
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       <Box

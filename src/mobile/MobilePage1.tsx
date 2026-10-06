@@ -467,31 +467,33 @@ export default function MobilePage1({
             )}
           </Box>
 
-          {/* 方案 B：動態穿衣與生活指南提示膠囊列 (微光玻璃晶片) */}
+          {/* 方案 B：動態穿衣與生活指南提示膠囊列 (微光毛玻璃晶片卡) */}
           {livingTip && (
             <Box
               sx={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 0.75,
-                px: 1.5,
-                py: 0.5,
-                mt: 0.25,
-                borderRadius: "16px",
-                background: "rgba(255, 255, 255, 0.08)",
-                border: "1px solid rgba(255, 255, 255, 0.16)",
-                backdropFilter: "blur(12px)",
-                boxShadow: `0 2px 10px rgba(0,0,0,0.2), inset 0 0 12px ${sky.neonPrimary}15`,
+                px: 1.8,
+                py: 0.65,
+                mt: 0.35,
+                borderRadius: "20px",
+                background: sky.cardItemGradient || "linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%)",
+                border: `1px solid ${sky.dimBorder || "rgba(255, 255, 255, 0.22)"}`,
+                backdropFilter: "blur(16px) saturate(160%)",
+                WebkitBackdropFilter: "blur(16px) saturate(160%)",
+                boxShadow: `0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 12px ${sky.neonPrimary}15`,
                 animation: "fadeIn 0.4s ease",
               }}
             >
               <Typography
                 sx={{
-                  fontSize: { xs: 13, sm: 14 },
+                  fontSize: { xs: 13, sm: 13.5 },
                   fontWeight: 700,
                   color: sky.textPrimary,
                   letterSpacing: 0.4,
-                  textShadow: `0 0 8px ${sky.neonPrimary}33`,
+                  textShadow: `0 0 10px ${sky.neonPrimary}44`,
+                  lineHeight: 1.3,
                 }}
               >
                 {livingTip}

@@ -161,10 +161,31 @@ export default function WeatherPage() {
       // 點回現在時間 -> 重新啟動「自動依時間切換」機制
       setSelectedPeriodTime(null);
     } else {
-      // 點選其他時段 -> 鎖定該時段，關閉自動切換機制
       setSelectedPeriodTime(startTime);
     }
   }, [autoCurrentPeriod, setSelectedPeriodTime]);
+
+  // 智慧時段巡檢：
+  // 1. 若使用者選了「過去時段」（endTime <= currentTime），停留超過 45 秒後自動幫他校正切回「現在時間」
+  // 2. 若使用者選的是「未來時段」（startTime > currentTime），永久鎖定保留使用者的選擇，絕不自動關閉
+  useEffect(() => {
+    if (!selectedPeriodTime) return;
+
+    // 檢查選中的時段是否為「過去時段」
+    const selected = periods.find((p) => p.startTime === selectedPeriodTime);
+    if (!selected) return;
+
+    const isPast = dayjs(selected.endTime).isBefore(currentTime) || dayjs(selected.endTime).isSame(currentTime);
+
+    if (isPast) {
+      // 45 秒後自動歸位回現在時間，避免使用者忘記切換而看著歷史舊資訊
+      const timer = setTimeout(() => {
+        setSelectedPeriodTime(null);
+      }, 45000);
+      return () => clearTimeout(timer);
+    }
+    // 未來時段：不設定超時，永久維持選取
+  }, [selectedPeriodTime, periods, currentTime, setSelectedPeriodTime]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing || cooldown > 0) return;

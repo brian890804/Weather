@@ -577,11 +577,38 @@ export function useWeatherData() {
     return { temps, winds, realtimeWeather, townshipStations };
   }, [setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations]);
 
-  const refetch = useCallback(async () => {
-    const rtPromise = refetchRealtime();
-    const swrPromise = mutate();
-    await Promise.allSettled([rtPromise, swrPromise]);
-  }, [refetchRealtime, mutate]);
+  const refetch = useCallback(async (force = false) => {
+    setIsLoading(true);
+    try {
+      const rtPromise = refetchRealtime();
+      let fetchPromise: Promise<any>;
+      if (force) {
+        fetchPromise = fetchAllWeatherData().then((result) => {
+          if (result && result.cities && result.cities.length > 0) {
+            const nowIso = dayjs().toISOString();
+            writeCache({
+              fetchedAt: nowIso,
+              cities: result.cities,
+              weeklyForecasts: result.weeklyForecasts,
+              realtimeTemps: result.realtimeTemps,
+              realtimeWinds: result.realtimeWinds,
+            });
+            setCities(result.cities);
+            if (result.weeklyForecasts) setWeeklyForecasts(result.weeklyForecasts);
+            if (result.realtimeTemps) setRealtimeTemps(result.realtimeTemps);
+            if (result.realtimeWinds) setRealtimeWinds(result.realtimeWinds);
+            setLastFetchedAt(nowIso);
+          }
+          return result;
+        });
+      } else {
+        fetchPromise = mutate();
+      }
+      await Promise.allSettled([rtPromise, fetchPromise]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refetchRealtime, mutate, setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setLastFetchedAt, setIsLoading]);
 
   return { cities, isLoading, error, refetch, refetchRealtime };
 }

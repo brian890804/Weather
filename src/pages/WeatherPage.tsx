@@ -124,26 +124,47 @@ export default function WeatherPage() {
     [currentTownshipData]
   );
 
-  // 3. 判斷自動預設當前時段（以現在時間為基準）
-  const autoCurrentPeriod = useMemo(() => {
-    const now = dayjs();
-    return (
-      periods.find(
-        (p) => now.isAfter(dayjs(p.startTime)) && now.isBefore(dayjs(p.endTime))
-      ) ?? periods[0]
-    );
-  }, [periods]);
+  // 當前系統時間狀態（每 30 秒自動偵測一次，確保時間跨過 3hr 區間時能及時觸發切換）
+  const [currentTime, setCurrentTime] = useState(() => dayjs());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(dayjs());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // 4. 使用者點擊時段卡片選中的時段（瞬間秒開）
+  // 3. 判斷自動預設當前時段（以現在時間為基準；若找不到涵蓋當前的時段，找最接近現在的未過期時段）
+  const autoCurrentPeriod = useMemo(() => {
+    if (!periods.length) return null;
+    const match = periods.find((p) => {
+      const st = dayjs(p.startTime);
+      const et = dayjs(p.endTime);
+      return !currentTime.isBefore(st) && currentTime.isBefore(et);
+    });
+    if (match) return match;
+    // 若當前時間跨度找不到（例如剛好在交界），找離現在最近的未來時段
+    const upcoming = periods.find((p) => dayjs(p.endTime).isAfter(currentTime));
+    return upcoming ?? periods[0];
+  }, [periods, currentTime]);
+
+  // 4. 使用者點擊時段卡片選中的時段
+  // 注意：若 selectedPeriodTime 為 null 或剛好等於 autoCurrentPeriod 的 startTime，視為「自動模式」
   const displayPeriod = useMemo(() => {
-    return selectedPeriodTime
-      ? periods.find((p) => p.startTime === selectedPeriodTime) ?? autoCurrentPeriod
-      : autoCurrentPeriod;
+    if (!selectedPeriodTime) return autoCurrentPeriod;
+    const target = periods.find((p) => p.startTime === selectedPeriodTime);
+    return target ?? autoCurrentPeriod;
   }, [selectedPeriodTime, periods, autoCurrentPeriod]);
 
+  // 使用者手動切換時段：若點擊了「當前時段 (現)」，重置為 null 恢復自動模式；若點擊其他時段，鎖定使用者選擇
   const handleSelectPeriod = useCallback((startTime: string) => {
-    setSelectedPeriodTime(startTime);
-  }, [setSelectedPeriodTime]);
+    if (autoCurrentPeriod && startTime === autoCurrentPeriod.startTime) {
+      // 點回現在時間 -> 重新啟動「自動依時間切換」機制
+      setSelectedPeriodTime(null);
+    } else {
+      // 點選其他時段 -> 鎖定該時段，關閉自動切換機制
+      setSelectedPeriodTime(startTime);
+    }
+  }, [autoCurrentPeriod, setSelectedPeriodTime]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing || cooldown > 0) return;
@@ -157,20 +178,9 @@ export default function WeatherPage() {
 
     setRefreshing(true);
     try {
-      const cache = readCache();
-      const minutesAgo = getMinutesSinceFetched(cache?.fetchedAt);
-
-      if (minutesAgo < MANUAL_REFRESH_MIN_INTERVAL_MINUTES) {
-        // 預報資料仍新鮮，但即測氣溫 (O-A0001-001) 必定立即重新拉取最新數值！
-        await refetchRealtime();
-        setSnackbarMsg('即測氣溫已更新為最新測站數據！預報模型資料仍為最新狀態。');
-        setCooldown(5);
-        return;
-      }
-
-      // 遵守 Stale-While-Revalidate 原則
-      await refetch();
-      setSnackbarMsg('預報與即測氣溫資料已成功更新！');
+      // 下拉重整時強制同時更新逐 3hr 預報與即測實測數據，穿透快取
+      await refetch(true);
+      setSnackbarMsg('預報與即測氣溫資料已成功更新為最新數據！');
       setCooldown(15);
     } catch (err: any) {
       console.warn('Refresh error:', err);

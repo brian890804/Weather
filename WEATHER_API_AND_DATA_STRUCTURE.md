@@ -314,3 +314,37 @@ export interface WeatherState {
   setError: (error: string | null) => void;
 }
 ```
+
+---
+
+### 4. 行動端 Cyberpunk HUD 儀表與生活穿衣指南模型 (`src/mobile/types.ts`)
+
+#### (1) `HudMetricItem`（首頁 4 大圓形量測環）
+```ts
+export interface HudMetricItem {
+  key: string;            // 'apparentTemp' | 'pop' | 'windDirection' | 'windSpeed'
+  label: string;          // 儀表中文名稱 (體感 / 降雨 / 風向 / 風速)
+  subLabel: string;       // 次標題 (實測精算體感 / 降雨機率 / 風向方位 / 即測風速)
+  value: string;          // 當前數值 (例如 "23.4°"、"30%"、"東北"、"4.9m/s")
+  percent: number;        // 進度環百分比 (0~100)
+  neonColor: string;      // 霓虹主色彩 (Hex)
+  neonGlow: string;       // 霓虹暈光色彩 (RGBA)
+  miniIcon: ReactNode;    // 儀表核心向量圖示 (MUI SVG)
+}
+```
+
+#### (2) `ActiveDayDetails` & 穿衣生活指南計算 (`src/mobile/dayDetailsHelper.ts`)
+* **動態體感穿衣階梯判定**：
+  * $\ge 30^\circ\text{C}$：清涼透氣（純棉短袖，注意防曬補水 ☀️）
+  * $25 \sim 29^\circ\text{C}$：短袖輕裝（短袖衣物，通風舒適 👕）
+  * $20 \sim 24^\circ\text{C}$：薄款外套（長袖配薄夾克，舒適防風 🧥）
+  * $15 \sim 19^\circ\text{C}$：保暖衣物（長袖毛衣或厚上衣 🧣）
+  * $< 15^\circ\text{C}$：厚實防寒（羽絨外套，注意保暖 🧤）
+* **降雨具備建議判定**：
+  * $\ge 50\%$：🌧 務必攜傘
+  * $30 \sim 49\%$：☂️ 建議備傘
+  * $< 30\%$：☀️ 無需攜傘
+* **行動端呈現形式**：
+  * **Page 1 首頁看板**：即時生活指南膠囊晶片（Pill Badge），展示於最後更新時間下方，文字完整不被圓形儀表擠壓。
+  * **Page 2 趨勢頁**：全版 Bento Card 深度生活指南（包含早晚溫差、紫外線指數、戶外運動適宜度）。
+

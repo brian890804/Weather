@@ -264,7 +264,6 @@ export default function MobilePage1({
                 color: "grey",
                 fontWeight: 500,
                 letterSpacing: 0.3,
-                fontFamily: "monospace, sans-serif",
               }}
             >
               最後更新數據時間:{" "}

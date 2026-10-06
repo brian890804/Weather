@@ -139,7 +139,6 @@ export default function MobileHudMetrics({
                   fontSize: { xs: 15.5, sm: 17.5 },
                   fontWeight: 800,
                   color: "#FFFFFF",
-                  fontFamily: "monospace, sans-serif",
                   letterSpacing: -0.5,
                   textShadow: `0 0 10px ${item.neonGlow}`,
                   lineHeight: 1.1,

@@ -77,7 +77,7 @@ export default function MobilePage2({
             sx={{
               fontSize: 17,
               fontWeight: 800,
-              color: "#FFFFFF",
+              color: "#FFF",
               letterSpacing: 0.6,
               textShadow: `0 0 12px ${sky.neonPrimary}66`,
             }}
@@ -118,7 +118,7 @@ export default function MobilePage2({
                 sx={{
                   fontSize: 17,
                   fontWeight: 800,
-                  color: "#FFFFFF",
+                  color: "#FFF",
                   letterSpacing: 0.6,
                   textShadow: `0 0 12px ${sky.neonPrimary}66`,
                 }}

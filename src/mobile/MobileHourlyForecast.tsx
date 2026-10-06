@@ -25,8 +25,13 @@ export default function MobileHourlyForecast({
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
   const selectedCity = useWeatherStore((s) => s.selectedCity);
   const selectedTownship = useWeatherStore((s) => s.selectedTownship);
-  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
+  const townshipKey = selectedTownship
+    ? `${selectedCity}_${selectedTownship}`
+    : null;
+  const realtimeTemp =
+    townshipKey && realtimeTemps[townshipKey]
+      ? realtimeTemps[townshipKey]
+      : realtimeTemps[selectedCity];
 
   return (
     <Box
@@ -43,14 +48,14 @@ export default function MobileHourlyForecast({
           display: "flex",
           alignItems: "center",
           px: "4px",
-          mb: "6px",
+          mb: "10px",
         }}
       >
         <Typography
           sx={{
-            fontSize: 13.5,
+            fontSize: 17,
             fontWeight: 700,
-            color: sky.textSecondary,
+            color: "#FFF",
             letterSpacing: 0.3,
           }}
         >
@@ -100,7 +105,9 @@ export default function MobileHourlyForecast({
                 border: isSel
                   ? `1px solid ${sky.neonPrimary}99`
                   : `1px solid ${sky.dimBorder}`,
-                boxShadow: isSel ? `0 0 14px ${sky.neonPrimary}4d` : "0 2px 6px rgba(0,0,0,0.18)",
+                boxShadow: isSel
+                  ? `0 0 14px ${sky.neonPrimary}4d`
+                  : "0 2px 6px rgba(0,0,0,0.18)",
                 cursor: "pointer",
                 transition: "all 0.15s ease",
                 WebkitTapHighlightColor: "transparent",
@@ -119,7 +126,7 @@ export default function MobileHourlyForecast({
                 <Typography
                   noWrap
                   sx={{
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: isCur ? 800 : 600,
                     color: isCur ? "#7DD3FC" : sky.textSecondary,
                     lineHeight: 1,
@@ -141,10 +148,10 @@ export default function MobileHourlyForecast({
               >
                 <Typography
                   sx={{
-                    fontSize: 14.5,
+                    fontSize: 16,
                     fontWeight: isCur ? 800 : 700,
                     color: isCur
-                      ? "#FFFFFF"
+                      ? "#FFF"
                       : isSel
                         ? sky.textPrimary
                         : sky.textSecondary,
@@ -169,7 +176,7 @@ export default function MobileHourlyForecast({
                   weatherCode={p.weatherCode}
                   weather={p.weather}
                   startTime={p.startTime}
-                  size={34}
+                  size={50}
                 />
               </Box>
 
@@ -184,7 +191,7 @@ export default function MobileHourlyForecast({
               >
                 <Typography
                   sx={{
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: 700,
                     color: pv > 0 ? "#7DD3FC" : "transparent",
                     lineHeight: 1,
@@ -208,13 +215,15 @@ export default function MobileHourlyForecast({
                   sx={{
                     width: "100%",
                     textAlign: "center",
-                    fontSize: isCur && realtimeTemp ? 15.5 : 16.5,
+                    fontSize: isCur && realtimeTemp ? 16.5 : 17.5,
                     fontWeight: 800,
                     color: sky.textPrimary,
                     lineHeight: 1,
                   }}
                 >
-                  {isCur && realtimeTemp ? `${realtimeTemp}°` : `${p.temperature}°`}
+                  {isCur && realtimeTemp
+                    ? `${realtimeTemp}°`
+                    : `${p.temperature}°`}
                 </Typography>
               </Box>
             </Box>

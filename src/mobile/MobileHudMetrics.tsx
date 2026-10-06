@@ -153,9 +153,9 @@ export default function MobileHudMetrics({
           {/* 儀表下方標籤 */}
           <Typography
             sx={{
-              fontSize: { xs: 13, sm: 14 },
+              fontSize: { xs: 16, sm: 17 },
               fontWeight: 800,
-              color: sky.textSecondary,
+              color: "#FFF",
               letterSpacing: 0.5,
             }}
           >

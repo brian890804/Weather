@@ -45,10 +45,17 @@ export default function MobilePage1({
   sky,
 }: MobilePage1Props) {
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const isViewingCurrent = !selectedPeriodTime || selectedPeriodTime === autoCurrentPeriod?.startTime;
-  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
-  const displayHeroTemp = (isViewingCurrent && realtimeTemp) ? realtimeTemp : period?.temperature;
+  const isViewingCurrent =
+    !selectedPeriodTime || selectedPeriodTime === autoCurrentPeriod?.startTime;
+  const townshipKey = selectedTownship
+    ? `${selectedCity}_${selectedTownship}`
+    : null;
+  const realtimeTemp =
+    townshipKey && realtimeTemps[townshipKey]
+      ? realtimeTemps[townshipKey]
+      : realtimeTemps[selectedCity];
+  const displayHeroTemp =
+    isViewingCurrent && realtimeTemp ? realtimeTemp : period?.temperature;
 
   return (
     <Box
@@ -86,6 +93,7 @@ export default function MobilePage1({
             textAlign: "center",
             py: 0.1,
             flexShrink: 0,
+            gap: 0.5,
           }}
         >
           {/* 1. 天氣圖示 */}
@@ -121,7 +129,7 @@ export default function MobilePage1({
                 weatherCode={period.weatherCode}
                 weather={period.weather}
                 startTime={period.startTime}
-                size={76}
+                size={150}
               />
             </Box>
           </Box>
@@ -137,7 +145,7 @@ export default function MobilePage1({
           >
             <Typography
               sx={{
-                fontSize: { xs: 16.5, sm: 18 },
+                fontSize: { xs: 30, sm: 30 },
                 fontWeight: 800,
                 color: sky.textPrimary,
                 letterSpacing: 1.2,
@@ -184,7 +192,7 @@ export default function MobilePage1({
           >
             <Typography
               sx={{
-                fontSize: 12.5,
+                fontSize: 20,
                 fontWeight: 600,
                 color: sky.textSecondary,
                 letterSpacing: 0.5,
@@ -227,7 +235,7 @@ export default function MobilePage1({
             >
               <Typography
                 sx={{
-                  fontSize: 14.5,
+                  fontSize: 18,
                   fontWeight: 800,
                   color: sky.textPrimary,
                   letterSpacing: 0.5,
@@ -252,14 +260,17 @@ export default function MobilePage1({
           >
             <Typography
               sx={{
-                fontSize: 11,
-                color: "rgba(255, 255, 255, 0.45)",
+                fontSize: 14,
+                color: "grey",
                 fontWeight: 500,
                 letterSpacing: 0.3,
                 fontFamily: "monospace, sans-serif",
               }}
             >
-              最後更新數據時間: {lastFetchedAt ? dayjs(lastFetchedAt).format("HH:mm") : dayjs().format("HH:mm")}
+              最後更新數據時間:{" "}
+              {lastFetchedAt
+                ? dayjs(lastFetchedAt).format("HH:mm")
+                : dayjs().format("HH:mm")}
             </Typography>
           </Box>
         </Box>

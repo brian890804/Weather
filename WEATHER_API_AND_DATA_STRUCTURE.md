@@ -52,8 +52,12 @@ $$\Delta t = \text{NextWindowStart} - \text{CurrentTime}$$
 
 * **呼叫來源**：交通部中央氣象署開放資料平台（CWA OpenData API）。
 * **資料集代碼**：
+  * **全台 870+ 自動氣象站即測現況**：`O-A0001-001`（單一輕量請求，拉取全台測站即時溫度、風向、風速，保留小數點 1 位，耗時僅約 180ms）。
   * 全台 22 縣市鄉鎮 3 天逐 3 小時預報：`F-D0047-001` ～ `F-D0047-085`。
   * 全台未來 1 週逐 12 小時預報：`F-D0047-091`（單一輕量請求）。
+* **即測實況與數值預報模型的分流機制**：
+  * **即測資料 (`O-A0001-001`)**：進入首頁或手動點擊「重新整理」時即時調用，無須等待預報快取過期，確保呈現最新站點現況。
+  * **逐 3 小時預報模型 (`F-D0047`)**：維持嚴格的 3~6 小時快取保護，非必要不重發 22 支縣市請求。
 * **分批並發控制 (Batch Size = 3)**：
   為避免一次同時發送 22 支 API 觸發氣象署 WAF 429 拒絕服務，系統改採每批 3 支併發，批次間微間隔 250ms：
   ```ts
@@ -250,15 +254,29 @@ export interface ParsedCityData {
 }
 ```
 
-#### (4) `CachedData`（本地快取與壓縮儲存）
+#### (4) `RealtimeWindData`（即測風向與風速模型）
 ```ts
-export interface CachedData {
-  fetchedAt: string;                                   // 資料拉取時的 ISO 8601 時間字串
-  cities: ParsedCityData[];                            // 全台 22 縣市完整預報資料
-  weeklyForecasts?: Record<string, WeeklyForecastDay[]>; // 未來 7 天各縣市預報
+export interface RealtimeWindData {
+  windSpeed: string;         // e.g. "4.9" (保留 1 位小數，拒絕四捨五入)
+  windDirection: string;     // e.g. "北北東風"
+  windCardinal: string;      // e.g. "北北東"
+  windDegree: number;        // e.g. 22 (真實角度度數，供羅盤平滑旋轉)
+  beaufortScale: string;     // e.g. "3" (蒲福風級)
+  stationName?: string;      // e.g. "大武崙" (生活代表測站名稱)
 }
 ```
-*註：寫入 LocalStorage 前會由 `packData()` 將 `WeatherPeriod` 的物件 Key 轉換為純陣列索引序列，使 5MB+ 的資料大幅縮減至 1.4MB 以內。*
+
+#### (5) `CachedData`（本地快取與壓縮儲存）
+```ts
+export interface CachedData {
+  fetchedAt: string;                                     // 資料拉取時的 ISO 8601 時間字串
+  cities: ParsedCityData[];                              // 全台 22 縣市完整預報資料
+  weeklyForecasts?: Record<string, WeeklyForecastDay[]>; // 未來 7 天各縣市預報
+  realtimeTemps?: Record<string, string>;                // 鄉鎮即時實測氣溫 (如 "24.8")
+  realtimeWinds?: Record<string, RealtimeWindData>;      // 鄉鎮即時實測風況資料
+}
+```
+*註：寫入 LocalStorage 前會由 `packData()` 將 `WeatherPeriod` 與 `realtimeWinds` 轉換為壓縮欄位結構，使整體龐大資料穩定控制在 1.4MB 以內。*
 
 ---
 

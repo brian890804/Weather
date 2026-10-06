@@ -267,7 +267,7 @@ export function useMobileWeatherData({
         miniIcon: React.createElement(AirIcon, { sx: { fontSize: 20 } }),
       },
     ];
-  }, [period, popStr, selectedPeriodTime, selectedTownship, selectedCity, realtimeWinds]);
+  }, [period, popStr, selectedPeriodTime, selectedTownship, selectedCity, realtimeTemps, realtimeWinds]);
 
   // ── 第二頁選中的日期（預設為今天） ──
   const activeForecastDate = useMemo(() => {

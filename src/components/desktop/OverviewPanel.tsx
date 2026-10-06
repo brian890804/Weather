@@ -272,7 +272,18 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         subtext={`指數 ${period.minComfortIndex}`}
       />
     </>
-  ), [period, pop, displayTemp, isCurrent, realtimeTemp]);
+  ), [
+    period,
+    pop,
+    displayTemp,
+    isCurrent,
+    realtimeTemp,
+    realtimeWind,
+    displayApparentTemp,
+    displayWindSpeed,
+    displayWindDirection,
+    displayBeaufortScale,
+  ]);
 
   return (
     <Box

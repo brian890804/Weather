@@ -87,7 +87,7 @@ export function getSkyTheme(
   if (weather.includes("雨") || pop >= 35) {
     return {
       bg: "linear-gradient(165deg, #091728 0%, #10263f 45%, #18385a 100%)",
-      glow: "radial-gradient(ellipse 95% 55% at 50% -5%, rgba(56, 189, 248, 0.52) 0%, rgba(14, 165, 233, 0.30) 45%, transparent 75%), radial-gradient(circle 380px at 85% 75%, rgba(56, 189, 248, 0.22) 0%, transparent 68%), radial-gradient(circle 320px at 15% 40%, rgba(14, 165, 233, 0.18) 0%, transparent 65%)",
+      glow: "radial-gradient(ellipse 95% 55% at 50% -5%, rgba(56, 189, 248, 0.52) 0%, rgba(148, 163, 184, 0.30) 45%, transparent 75%), radial-gradient(circle 380px at 85% 75%, rgba(56, 189, 248, 0.22) 0%, transparent 68%), radial-gradient(circle 320px at 15% 40%, rgba(14, 165, 233, 0.18) 0%, transparent 65%)",
       neonPrimary: "#38BDF8",
       neonSecondary: "#0EA5E9",
       neonGlow: "rgba(56, 189, 248, 0.65)",
@@ -108,16 +108,24 @@ export function getSkyTheme(
     };
   }
 
-  // 5. 白天陰天 / 多雲 (Overcast / Cloudy - 柔和沉穩青灰雲霧)
-  if (weather.includes("陰") || weather.includes("多雲")) {
+  // 5. 白天大晴天 / 晴朗 (Sunny / Clear - 包含「晴」、「晴時多雲」、「多雲時晴」且無雨)
+  const isSunnyCondition =
+    weather === "晴" ||
+    weather === "晴天" ||
+    weather.startsWith("晴") ||
+    weather.includes("晴時多雲") ||
+    (weather.includes("多雲時晴") && pop < 30) ||
+    (weather.includes("晴") && !weather.includes("陰") && pop < 30);
+
+  if (isSunnyCondition) {
     return {
-      bg: "linear-gradient(165deg, #0e1824 0%, #17283c 45%, #213752 100%)",
-      glow: "radial-gradient(ellipse 95% 55% at 50% -5%, rgba(125, 211, 252, 0.42) 0%, rgba(148, 163, 184, 0.25) 45%, transparent 72%), radial-gradient(circle 380px at 85% 75%, rgba(125, 211, 252, 0.18) 0%, transparent 68%), radial-gradient(circle 320px at 15% 40%, rgba(148, 163, 184, 0.15) 0%, transparent 65%)",
-      neonPrimary: "#7DD3FC",
-      neonSecondary: "#94A3B8",
-      neonGlow: "rgba(125, 211, 252, 0.60)",
+      bg: "linear-gradient(165deg, #1f1102 0%, #351d04 40%, #4e2607 70%, #632d09 100%)",
+      glow: "radial-gradient(ellipse 95% 60% at 80% -5%, rgba(251, 191, 36, 0.65) 0%, rgba(249, 115, 22, 0.38) 42%, transparent 75%), radial-gradient(circle 420px at 15% 75%, rgba(249, 115, 22, 0.26) 0%, transparent 68%), radial-gradient(circle 340px at 85% 45%, rgba(251, 191, 36, 0.22) 0%, transparent 65%)",
+      neonPrimary: "#FBBF24",
+      neonSecondary: "#F97316",
+      neonGlow: "rgba(251, 191, 36, 0.70)",
       neonAuraBg:
-        "radial-gradient(circle, rgba(125, 211, 252, 0.32) 0%, rgba(148, 163, 184, 0.16) 55%, transparent 72%)",
+        "radial-gradient(circle, rgba(251, 191, 36, 0.45) 0%, rgba(249, 115, 22, 0.25) 55%, transparent 72%)",
       glass: "rgba(255, 255, 255, 0.04)",
       glassBorder: "rgba(255, 255, 255, 0.14)",
       dimGlass: "rgba(255, 255, 255, 0.02)",
@@ -127,21 +135,21 @@ export function getSkyTheme(
       cardItemGradient:
         "linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%)",
       textPrimary: "#FFFFFF",
-      textSecondary: "rgba(226, 232, 240, 0.85)",
-      accentText: "#BAE6FD",
-      weatherType: "cloudy",
+      textSecondary: "rgba(254, 243, 199, 0.85)",
+      accentText: "#FDE68A",
+      weatherType: "sunny",
     };
   }
 
-  // 6. 白天大晴天 / 晴朗 (Sunny / Clear - 亮麗金黃暖橘太陽光輝與光線感)
+  // 6. 白天陰天 / 多雲 (Overcast / Cloudy - 柔和沉穩青灰雲霧)
   return {
-    bg: "linear-gradient(165deg, #1f1102 0%, #351d04 40%, #4e2607 70%, #632d09 100%)",
-    glow: "radial-gradient(ellipse 95% 60% at 80% -5%, rgba(251, 191, 36, 0.65) 0%, rgba(249, 115, 22, 0.38) 42%, transparent 75%), radial-gradient(circle 420px at 15% 75%, rgba(249, 115, 22, 0.26) 0%, transparent 68%), radial-gradient(circle 340px at 85% 45%, rgba(251, 191, 36, 0.22) 0%, transparent 65%)",
-    neonPrimary: "#FBBF24",
-    neonSecondary: "#F97316",
-    neonGlow: "rgba(251, 191, 36, 0.70)",
+    bg: "linear-gradient(165deg, #0e1824 0%, #17283c 45%, #213752 100%)",
+    glow: "radial-gradient(ellipse 95% 55% at 50% -5%, rgba(125, 211, 252, 0.42) 0%, rgba(148, 163, 184, 0.25) 45%, transparent 72%), radial-gradient(circle 380px at 85% 75%, rgba(125, 211, 252, 0.18) 0%, transparent 68%), radial-gradient(circle 320px at 15% 40%, rgba(148, 163, 184, 0.15) 0%, transparent 65%)",
+    neonPrimary: "#7DD3FC",
+    neonSecondary: "#94A3B8",
+    neonGlow: "rgba(125, 211, 252, 0.60)",
     neonAuraBg:
-      "radial-gradient(circle, rgba(251, 191, 36, 0.45) 0%, rgba(249, 115, 22, 0.25) 55%, transparent 72%)",
+      "radial-gradient(circle, rgba(125, 211, 252, 0.32) 0%, rgba(148, 163, 184, 0.16) 55%, transparent 72%)",
     glass: "rgba(255, 255, 255, 0.04)",
     glassBorder: "rgba(255, 255, 255, 0.14)",
     dimGlass: "rgba(255, 255, 255, 0.02)",
@@ -151,8 +159,8 @@ export function getSkyTheme(
     cardItemGradient:
       "linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%)",
     textPrimary: "#FFFFFF",
-    textSecondary: "rgba(254, 243, 199, 0.85)",
-    accentText: "#FDE68A",
-    weatherType: "sunny",
+    textSecondary: "rgba(226, 232, 240, 0.85)",
+    accentText: "#BAE6FD",
+    weatherType: "cloudy",
   };
 }

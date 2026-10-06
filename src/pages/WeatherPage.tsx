@@ -654,9 +654,36 @@ export default function WeatherPage() {
                 {displayPeriod && <OverviewPanel period={displayPeriod} />}
 
                 {/* 水平滑動時段卡片清單 */}
-                <Typography variant="h6" sx={{ fontWeight: 800, mt: 4, mb: 1.5, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
-                  未來 3 天逐時預報（逐 3 小時）
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 4, mb: 1.5 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#E2E8F0', fontSize: { xs: 17, sm: 20 } }}>
+                    未來 3 天逐時預報（逐 3 小時）
+                  </Typography>
+
+                  {selectedPeriodTime && autoCurrentPeriod && selectedPeriodTime !== autoCurrentPeriod.startTime && (
+                    <Box
+                      onClick={() => handleSelectPeriod(autoCurrentPeriod.startTime)}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.5,
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: '20px',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        backdropFilter: 'blur(8px)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        '&:hover': { background: 'rgba(255,255,255,0.18)' },
+                        '&:active': { transform: 'scale(0.96)' },
+                      }}
+                    >
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#60A5FA' }}>
+                        ↩ 回到現在
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
 
                 <DragScrollBox>
                   {periods.map((p) => (

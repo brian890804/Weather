@@ -263,7 +263,7 @@ export function useMobileWeatherData({
       clothIcon = "👕";
     } else if (appTemp >= 20) {
       clothTitle = "薄款外套";
-      clothDetail = "建議加薄外套或薄長袖";
+      clothDetail = "薄外套或薄長袖";
       clothIcon = "🧥";
     } else if (appTemp >= 15) {
       clothTitle = "保暖衣物";

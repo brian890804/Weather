@@ -17,7 +17,7 @@ import dayjs from 'dayjs';
 import WeatherIcon from '../WeatherIcon/WeatherIcon';
 import DragScrollBox from '../common/DragScrollBox';
 import type { WeatherPeriod } from '../../types/weather';
-import { tempColor, popColor, beaufortLabel } from '../../utils/weatherUtils';
+import { tempColor, popColor, beaufortLabel, calculateSteadmanApparentTemp } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import { useWeatherStore } from '../../store/weatherStore';
 
@@ -168,11 +168,28 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
   const pop = period.probabilityOfPrecipitation;
 
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
   const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
   const now = dayjs();
   const isCurrent = now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime));
-  const realtimeTemp = realtimeTemps[selectedCity];
+  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
+  const realtimeWind = (townshipKey && realtimeWinds[townshipKey]) ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity];
   const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
+  const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : period.windSpeed;
+  const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : period.windDirection;
+  const displayBeaufortScale = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : period.beaufortScale;
+
+  let displayApparentTemp = period.maxApparentTemperature;
+  if (isCurrent && realtimeTemp) {
+    const curTempNum = parseFloat(realtimeTemp);
+    const curRhNum = parseFloat(period.relativeHumidity) || 65;
+    const curWindNum = realtimeWind ? parseFloat(realtimeWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
+    if (!isNaN(curTempNum)) {
+      displayApparentTemp = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
+    }
+  }
 
   const circleStats = useMemo(() => (
     <>
@@ -183,17 +200,17 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         label="實測氣溫"
         icon={<ThermostatIcon fontSize="inherit" />}
         color={tempColor(displayTemp)}
-        subtext={isCurrent && realtimeTemp ? '即測站點真實現況' : '預報氣溫'}
+        subtext={isCurrent && realtimeTemp ? (realtimeWind?.stationName ? `即測站：${realtimeWind.stationName}` : '即測站點真實現況') : '預報氣溫'}
       />
 
       {/* 2. 體感溫度 */}
       <CircleStat
-        value={period.maxApparentTemperature}
+        value={displayApparentTemp}
         unit="°C"
         label="體感溫度"
         icon={<DeviceThermostatIcon fontSize="inherit" />}
         color="#FB923C"
-        subtext="人體感受"
+        subtext={isCurrent && realtimeTemp ? '實測精算體感' : '人體感受'}
       />
 
       {/* 3. 降雨機率 */}
@@ -218,22 +235,22 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
 
       {/* 5. 風速 */}
       <CircleStat
-        value={period.windSpeed}
+        value={displayWindSpeed}
         unit="m/s"
         label="平均風速"
         icon={<SpeedIcon fontSize="inherit" />}
         color="#818CF8"
-        subtext="每秒公尺"
+        subtext={isCurrent && realtimeWind ? '即測站即時風速' : '每秒公尺'}
       />
 
       {/* 6. 風向與風級 */}
       <CircleStat
-        value={period.beaufortScale}
+        value={displayBeaufortScale}
         unit="級"
-        label={period.windDirection}
+        label={displayWindDirection}
         icon={<AirIcon fontSize="inherit" />}
         color="#A78BFA"
-        subtext={beaufortLabel(period.beaufortScale)}
+        subtext={beaufortLabel(displayBeaufortScale)}
       />
 
       {/* 7. 露點溫度 */}

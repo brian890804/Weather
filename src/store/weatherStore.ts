@@ -74,9 +74,13 @@ interface WeatherState {
   error: string | null;
   setError: (msg: string | null) => void;
 
-  // 即測即時站點溫度 (以縣市名為 Key，例如 '臺北市': '25')
+  // 即測即時站點溫度 (以 '縣市_鄉鎮' 或 '縣市' 為 Key，例如 '基隆市_安樂區': '24.8')
   realtimeTemps: Record<string, string>;
   setRealtimeTemps: (temps: Record<string, string>) => void;
+
+  // 即測即時站點風速風向 (以 '縣市_鄉鎮' 或 '縣市' 為 Key)
+  realtimeWinds: Record<string, import('../types/weather').RealtimeWindData>;
+  setRealtimeWinds: (winds: Record<string, import('../types/weather').RealtimeWindData>) => void;
 
   // 上次更新時間
   lastFetchedAt: string | null;
@@ -86,6 +90,8 @@ interface WeatherState {
 export const useWeatherStore = create<WeatherState>((set, get) => ({
   realtimeTemps: {},
   setRealtimeTemps: (temps) => set({ realtimeTemps: temps }),
+  realtimeWinds: {},
+  setRealtimeWinds: (winds) => set({ realtimeWinds: winds }),
   cities: [],
   setCities: (data) => {
     const currentCity = get().selectedCity;

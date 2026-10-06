@@ -161,3 +161,29 @@ export function bftColor(scale?: string): string {
   return '#AB47BC';
 }
 
+/**
+ * 依據中央氣象署引用之 R.G. Steadman (1984) 體感溫度通用公式計算即時真實體感溫度：
+ * 體感溫度 = (1.04 × T) + (0.2 × e) - (0.65 × V) - 2.7
+ * 其中水氣壓 e (hPa) = (RH / 100) × 6.105 × exp((17.27 × T) / (237.7 + T))
+ * T: 氣溫 (°C)
+ * RH: 相對濕度 (%)
+ * V: 風速 (m/s)
+ * 數值結果保留 1 位小數（不四捨五入成整數）
+ */
+export function calculateSteadmanApparentTemp(
+  temperature: number,
+  relativeHumidity: number,
+  windSpeed: number
+): string {
+  const T = temperature;
+  const RH = Math.max(0, Math.min(100, relativeHumidity));
+  const V = Math.max(0, windSpeed);
+
+  // 水氣壓 e (百帕 hPa)
+  const e = (RH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
+  // 體感溫度公式
+  const AT = (1.04 * T) + (0.2 * e) - (0.65 * V) - 2.7;
+
+  return AT.toFixed(1);
+}
+

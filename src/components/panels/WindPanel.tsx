@@ -1,10 +1,12 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
 import { beaufortLabel, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
+import { useWeatherStore } from '../../store/weatherStore';
 
 function windDegree(dir: string): number {
   const map: Record<string, number> = {
@@ -20,8 +22,8 @@ function windDegree(dir: string): number {
   return map[dir] ?? 0;
 }
 
-function WindCompass({ direction, size = 80 }: { direction: string; size?: number }) {
-  const deg = windDegree(direction);
+function WindCompass({ direction, degree, size = 80 }: { direction: string; degree?: number; size?: number }) {
+  const deg = degree ?? windDegree(direction);
   return (
     <Box
       sx={{
@@ -159,6 +161,24 @@ export default function WindPanel({
   onSelectPeriod,
   autoCurrentPeriodStartTime,
 }: WindPanelProps) {
+  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
+  const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
+
+  const now = dayjs();
+  const isCurrent = currentPeriod
+    ? (currentPeriod.startTime === autoCurrentPeriodStartTime ||
+       (now.isAfter(dayjs(currentPeriod.startTime)) && now.isBefore(dayjs(currentPeriod.endTime))))
+    : false;
+
+  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const realtimeWind = (townshipKey && realtimeWinds[townshipKey]) ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity];
+
+  const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : (currentPeriod?.windDirection ?? '');
+  const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : (currentPeriod?.windSpeed ?? '');
+  const displayBeaufort = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : (currentPeriod?.beaufortScale ?? '');
+  const displayWindDegree = (isCurrent && realtimeWind) ? realtimeWind.windDegree : undefined;
+
   return (
     <Box>
       {/* 目前風況 hero */}
@@ -210,16 +230,21 @@ export default function WindPanel({
           </Box>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h4" sx={{ fontWeight: 800, color: '#90CAF9', lineHeight: 1 }}>
-              {currentPeriod.windDirection}
+              {displayWindDirection}
             </Typography>
             <Typography variant="h6" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {beaufortLabel(currentPeriod.beaufortScale)} (蒲福 {currentPeriod.beaufortScale} 級)
+              {beaufortLabel(displayBeaufort)} (蒲福 {displayBeaufort} 級)
+              {isCurrent && realtimeWind?.stationName && (
+                <Typography component="span" sx={{ fontSize: '0.85rem', color: '#60A5FA', ml: 1, fontWeight: 700 }}>
+                  〔即測站：{realtimeWind.stationName}〕
+                </Typography>
+              )}
             </Typography>
             <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              風速 {currentPeriod.windSpeed} m/s
+              風速 {displayWindSpeed} m/s
             </Typography>
           </Box>
-          <WindCompass direction={currentPeriod.windDirection} size={80} />
+          <WindCompass direction={displayWindDirection} degree={displayWindDegree} size={80} />
         </Box>
       )}
 

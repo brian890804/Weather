@@ -18,10 +18,10 @@ export default function MobileHudMetrics({
         width: "100%",
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
-        gap: { xs: "8px", sm: "14px" },
+        gap: { xs: "6px", sm: "12px" },
         mt: 1.2,
         mb: 0.5,
-        px: 0.5,
+        px: 0.25,
         // 外圈虛線慢速旋轉
         "@keyframes hudRotate": {
           from: { transform: "rotate(0deg)" },
@@ -40,12 +40,12 @@ export default function MobileHudMetrics({
             py: "2px",
           }}
         >
-          {/* 圓形 Cyberpunk HUD 儀表圈 */}
+          {/* 圓形 Cyberpunk HUD 儀表圈（放大尺寸） */}
           <Box
             sx={{
               position: "relative",
-              width: { xs: 78, sm: 84 },
-              height: { xs: 78, sm: 84 },
+              width: { xs: 86, sm: 94 },
+              height: { xs: 86, sm: 94 },
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -116,15 +116,15 @@ export default function MobileHudMetrics({
                 lineHeight: 1,
               }}
             >
-              {/* Icon 本身（無呼吸燈動畫，呈現穩定清爽發光質感） */}
+              {/* Icon 本身 */}
               <Box
                 sx={{
                   color: item.neonColor,
-                  mb: "3px",
+                  mb: "4px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  filter: `drop-shadow(0 0 4px ${item.neonColor}66)`,
+                  filter: `drop-shadow(0 0 5px ${item.neonColor}66)`,
                   "& svg": {
                     overflow: "visible",
                   },
@@ -133,10 +133,10 @@ export default function MobileHudMetrics({
                 {item.miniIcon}
               </Box>
 
-              {/* 數值 */}
+              {/* 數值（放大字體） */}
               <Typography
                 sx={{
-                  fontSize: { xs: 14.5, sm: 16 },
+                  fontSize: { xs: 15.5, sm: 17.5 },
                   fontWeight: 800,
                   color: "#FFFFFF",
                   fontFamily: "monospace, sans-serif",
@@ -153,7 +153,7 @@ export default function MobileHudMetrics({
           {/* 儀表下方標籤 */}
           <Typography
             sx={{
-              fontSize: 12.5,
+              fontSize: { xs: 13, sm: 14 },
               fontWeight: 800,
               color: sky.textSecondary,
               letterSpacing: 0.5,

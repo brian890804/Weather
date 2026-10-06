@@ -46,7 +46,8 @@ export default function MobilePage1({
 }: MobilePage1Props) {
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
   const isViewingCurrent = !selectedPeriodTime || selectedPeriodTime === autoCurrentPeriod?.startTime;
-  const realtimeTemp = realtimeTemps[selectedCity];
+  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
   const displayHeroTemp = (isViewingCurrent && realtimeTemp) ? realtimeTemp : period?.temperature;
 
   return (

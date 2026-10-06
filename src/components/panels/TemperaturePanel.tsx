@@ -36,12 +36,14 @@ export default function TemperaturePanel({
 }: TemperaturePanelProps) {
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
   const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
   const now = dayjs();
   const isCurrent = currentPeriod
     ? currentPeriod.startTime === autoCurrentPeriodStartTime ||
       (now.isAfter(dayjs(currentPeriod.startTime)) && now.isBefore(dayjs(currentPeriod.endTime)))
     : false;
-  const realtimeTemp = realtimeTemps[selectedCity];
+  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
   const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : currentPeriod?.temperature;
 
   return (

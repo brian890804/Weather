@@ -26,6 +26,7 @@ import {
   beaufortLabel,
   bftColor,
   comfortColor,
+  calculateSteadmanApparentTemp,
 } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import { useWeatherStore } from '../../store/weatherStore';
@@ -57,9 +58,26 @@ function PeriodCardBase({
   category = 'overview',
 }: PeriodCardProps) {
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
   const selectedCity = useWeatherStore((s) => s.selectedCity);
-  const realtimeTemp = realtimeTemps[selectedCity];
+  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
+  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
+  const realtimeWind = (townshipKey && realtimeWinds[townshipKey]) ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity];
   const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
+  const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : period.windSpeed;
+  const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : period.windDirection;
+  const displayBeaufortScale = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : period.beaufortScale;
+
+  let displayApparentTemp = period.maxApparentTemperature;
+  if (isCurrent && realtimeTemp) {
+    const curTempNum = parseFloat(realtimeTemp);
+    const curRhNum = parseFloat(period.relativeHumidity) || 65;
+    const curWindNum = realtimeWind ? parseFloat(realtimeWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
+    if (!isNaN(curTempNum)) {
+      displayApparentTemp = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
+    }
+  }
 
   const start = dayjs(period.startTime);
   const end = dayjs(period.endTime);
@@ -71,7 +89,7 @@ function PeriodCardBase({
   const uvIdx = period.uvIndex;
   const comfortDesc = period.maxComfortIndexDescription || '舒適';
   const cColor = comfortColor(comfortDesc);
-  const bColor = bftColor(period.beaufortScale);
+  const bColor = bftColor(displayBeaufortScale);
 
   return (
     <Card
@@ -191,7 +209,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>體感</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 800, color: '#F97316', fontSize: { xs: 16, sm: 17.5 } }}>
-                  {period.maxApparentTemperature}°C
+                  {displayApparentTemp}°C
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
@@ -224,7 +242,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>風向</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 800, color: '#90CAF9', fontSize: { xs: 15.5, sm: 17 } }}>
-                  {period.windDirection}
+                  {displayWindDirection}
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
@@ -233,13 +251,13 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>風速</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 900, color: '#818CF8', fontSize: { xs: 16.5, sm: 18 } }}>
-                  {period.windSpeed} m/s
+                  {displayWindSpeed} m/s
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>風級</Typography>
                 <Chip
-                  label={`蒲福 ${period.beaufortScale} 級`}
+                  label={`蒲福 ${displayBeaufortScale} 級`}
                   size="small"
                   sx={{
                     height: 24,
@@ -254,7 +272,7 @@ function PeriodCardBase({
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>等級</Typography>
                 <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 15, sm: 16 } }}>
-                  {beaufortLabel(period.beaufortScale)}
+                  {beaufortLabel(displayBeaufortScale)}
                 </Typography>
               </Stack>
             </Stack>
@@ -331,11 +349,11 @@ function PeriodCardBase({
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                  <ThermostatIcon sx={{ fontSize: 20, color: tempColor(period.maxApparentTemperature) }} />
+                  <ThermostatIcon sx={{ fontSize: 20, color: tempColor(displayApparentTemp) }} />
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>體感</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 800, color: tempColor(period.maxApparentTemperature), fontSize: { xs: 15.5, sm: 17 } }}>
-                  {period.maxApparentTemperature}°C
+                <Typography sx={{ fontWeight: 800, color: tempColor(displayApparentTemp), fontSize: { xs: 15.5, sm: 17 } }}>
+                  {displayApparentTemp}°C
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
@@ -371,7 +389,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>體感</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 800, color: '#F97316', fontSize: { xs: 15.5, sm: 17 } }}>
-                  {period.maxApparentTemperature}°C
+                  {displayApparentTemp}°C
                 </Typography>
               </Stack>
 

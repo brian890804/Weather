@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import type { WeatherPeriod } from "../types/weather";
 import WeatherIcon from "../components/WeatherIcon/WeatherIcon";
 import type { SkyTheme } from "./types";
+import { useWeatherStore } from "../store/weatherStore";
 
 interface MobileHourlyForecastProps {
   periods: WeatherPeriod[];
@@ -21,6 +22,12 @@ export default function MobileHourlyForecast({
   onSelectPeriod,
   sky,
 }: MobileHourlyForecastProps) {
+  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const selectedCity = useWeatherStore((s) => s.selectedCity);
+  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
+  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
+
   return (
     <Box
       sx={{
@@ -201,13 +208,13 @@ export default function MobileHourlyForecast({
                   sx={{
                     width: "100%",
                     textAlign: "center",
-                    fontSize: 16.5,
+                    fontSize: isCur && realtimeTemp ? 15.5 : 16.5,
                     fontWeight: 800,
                     color: sky.textPrimary,
                     lineHeight: 1,
                   }}
                 >
-                  {p.temperature}°
+                  {isCur && realtimeTemp ? `${realtimeTemp}°` : `${p.temperature}°`}
                 </Typography>
               </Box>
             </Box>

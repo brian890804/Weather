@@ -8,6 +8,7 @@ import type { WeatherPeriod } from "../types/weather";
 import type { DayForecast, HudMetricItem, ActiveDayDetails } from "./types";
 import { useWeatherStore } from "../store/weatherStore";
 import { computeActiveDayDetails } from "./dayDetailsHelper";
+import { calculateSteadmanApparentTemp } from "../utils/weatherUtils";
 
 function getWindDegree(dir: string): number {
   if (!dir) return 0;
@@ -172,23 +173,57 @@ export function useMobileWeatherData({
     };
   }, [period, periods, dailyList]);
 
+  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
+  const selectedPeriodTime = useWeatherStore((s) => s.selectedPeriodTime);
+  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
+
   // ── 第一頁 4 大指標 (Cyberpunk HUD 圓形儀表) ──
   const page1Metrics: HudMetricItem[] = useMemo(() => {
     if (!period) return [];
-    const appTemp = Number(period.maxApparentTemperature) || 20;
+
+    const now = dayjs();
+    const isViewingCurrent = !selectedPeriodTime || (now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime)));
+    const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+    const rtTemp = (isViewingCurrent && townshipKey && realtimeTemps[townshipKey])
+      ? realtimeTemps[townshipKey]
+      : (isViewingCurrent && realtimeTemps[selectedCity])
+      ? realtimeTemps[selectedCity]
+      : null;
+    const rtWind = (isViewingCurrent && townshipKey && realtimeWinds[townshipKey])
+      ? realtimeWinds[townshipKey]
+      : (isViewingCurrent && realtimeWinds[selectedCity])
+      ? realtimeWinds[selectedCity]
+      : null;
+
+    // 計算精準體感溫度：若為當前實況，依氣象署 Steadman 公式由「實測氣溫 + 相對濕度 + 實測風速」動態計算
+    let computedAppTempStr = period.maxApparentTemperature;
+    if (isViewingCurrent && rtTemp) {
+      const curTempNum = parseFloat(rtTemp);
+      const curRhNum = parseFloat(period.relativeHumidity) || 65;
+      const curWindNum = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
+      if (!isNaN(curTempNum)) {
+        computedAppTempStr = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
+      }
+    }
+
+    const appTemp = Number(computedAppTempStr) || 20;
     const tempPercent = Math.min(100, Math.max(15, (appTemp / 40) * 100));
     const popVal = parseInt(popStr) || 0;
+
     const windDir = period.windDirection || "偏東風";
-    const windDirDeg = getWindDegree(windDir);
-    const windVal = parseFloat(period.windSpeed) || 0;
+    const windDirText = rtWind ? rtWind.windCardinal : getWindCardinal(windDir);
+    const windDirDeg = rtWind ? rtWind.windDegree : getWindDegree(windDir);
+    const windVal = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 0);
+    const windSpeedText = rtWind ? `${rtWind.windSpeed}m/s` : `${period.windSpeed}m/s`;
     const windPercent = Math.min(100, Math.max(15, (windVal / 15) * 100));
 
     return [
       {
         key: "apparentTemp",
         label: "體感",
-        subLabel: "體感溫度",
-        value: `${period.maxApparentTemperature}°`,
+        subLabel: isViewingCurrent && rtTemp ? "實測精算體感" : "體感溫度",
+        value: `${computedAppTempStr}°`,
         percent: tempPercent,
         neonColor: "#FF7A00",
         neonGlow: "rgba(255, 122, 0, 0.65)",
@@ -207,8 +242,8 @@ export function useMobileWeatherData({
       {
         key: "windDirection",
         label: "風向",
-        subLabel: "風向方位",
-        value: getWindCardinal(windDir),
+        subLabel: rtWind ? "即測風向" : "風向方位",
+        value: windDirText,
         percent: 85,
         neonColor: "#00FF9F",
         neonGlow: "rgba(0, 255, 159, 0.7)",
@@ -224,15 +259,15 @@ export function useMobileWeatherData({
       {
         key: "windSpeed",
         label: "風速",
-        subLabel: "風向風速",
-        value: `${period.windSpeed}m/s`,
+        subLabel: rtWind ? "即測風速" : "風向風速",
+        value: windSpeedText,
         percent: windPercent,
         neonColor: "#D946EF",
         neonGlow: "rgba(217, 70, 239, 0.7)",
         miniIcon: React.createElement(AirIcon, { sx: { fontSize: 20 } }),
       },
     ];
-  }, [period, popStr]);
+  }, [period, popStr, selectedPeriodTime, selectedTownship, selectedCity, realtimeWinds]);
 
   // ── 第二頁選中的日期（預設為今天） ──
   const activeForecastDate = useMemo(() => {

@@ -107,11 +107,21 @@ export interface WeeklyForecastDay {
   startTime: string;
 }
 
+export interface RealtimeWindData {
+  windSpeed: string;         // e.g. "4.9" (保留 1 位小數)
+  windDirection: string;     // e.g. "北北東風"
+  windCardinal: string;      // e.g. "北北東"
+  windDegree: number;        // e.g. 22
+  beaufortScale: string;     // e.g. "3"
+  stationName?: string;      // e.g. "大武崙"
+}
+
 export interface CachedData {
   fetchedAt: string; // ISO string
   cities: ParsedCityData[];
   weeklyForecasts?: Record<string, WeeklyForecastDay[]>;
   realtimeTemps?: Record<string, string>;
+  realtimeWinds?: Record<string, RealtimeWindData>;
   [key: string]: any;
 }
 

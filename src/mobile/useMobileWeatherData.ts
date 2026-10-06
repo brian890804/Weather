@@ -64,12 +64,30 @@ export function useMobileWeatherData({
     const tmr = dayjs().add(1, "day").format("YYYY-MM-DD");
 
     if (cityWeekly && cityWeekly.length > 0) {
-      return cityWeekly.slice(0, 7).map((day) => {
-        const preFix =
-          day.dateStr === today ? "今天 " : day.dateStr === tmr ? "明天 " : "";
+      // 移除今天，只保留明天起的未來 6 天預報
+      const futureDays = cityWeekly.filter((day) => day.dateStr > today).slice(0, 6);
+      return futureDays.map((day) => {
+        const preFix = day.dateStr === tmr ? "明天 " : "";
         const lbl = `${preFix}${dayjs(day.dateStr).format("M/D (dd)")}`;
+        // 若週預報 (F-D0047-091) 的 maxPop 為 0，但 3 天逐時預報 (F-D0047-049) 中該日有提供 3 小時降雨機率，則進行融合
+        let fusedPop = day.maxPop;
+        if (fusedPop === 0 && periods.length > 0) {
+          const matchedDayPeriods = periods.filter(
+            (p) => dayjs(p.startTime).format("YYYY-MM-DD") === day.dateStr,
+          );
+          if (matchedDayPeriods.length > 0) {
+            const pops = matchedDayPeriods
+              .map((p) => parseInt(p.probabilityOfPrecipitation))
+              .filter((v) => !isNaN(v) && v > 0);
+            if (pops.length > 0) {
+              fusedPop = Math.max(...pops);
+            }
+          }
+        }
+
         return {
           ...day,
+          maxPop: fusedPop,
           dayLabel: lbl,
         };
       });
@@ -85,7 +103,8 @@ export function useMobileWeatherData({
 
     const list: DayForecast[] = Object.keys(groups)
       .sort()
-      .slice(0, 7)
+      .filter((d) => d > today)
+      .slice(0, 6)
       .map((d) => {
         const items = groups[d];
         let lo = 99,
@@ -102,11 +121,9 @@ export function useMobileWeatherData({
           if (pv > popMax) popMax = pv;
         });
         const lbl =
-          d === today
-            ? "今天"
-            : d === tmr
-              ? "明天"
-              : dayjs(d).format("M/D (dd)");
+          d === tmr
+            ? "明天 " + dayjs(d).format("M/D (dd)")
+            : dayjs(d).format("M/D (dd)");
         const rep =
           items.find((p) => dayjs(p.startTime).hour() >= 11) || items[0];
         return {
@@ -177,6 +194,9 @@ export function useMobileWeatherData({
   const selectedPeriodTime = useWeatherStore((s) => s.selectedPeriodTime);
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
   const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
+  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
+  const townshipStations = useWeatherStore((s) => s.townshipStations);
+  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
 
   // ── 第一頁 4 大指標 (Cyberpunk HUD 圓形儀表) 與生活小語 ──
   const page1Data = useMemo(() => {
@@ -185,22 +205,33 @@ export function useMobileWeatherData({
     const now = dayjs();
     const isViewingCurrent = !selectedPeriodTime || (now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime)));
     const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-    const rtTemp = (isViewingCurrent && townshipKey && realtimeTemps[townshipKey])
-      ? realtimeTemps[townshipKey]
+
+    const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
+    const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
+    const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
+
+    const rtTemp = activeStation?.temp || (isViewingCurrent && townshipKey && realtimeTemps[townshipKey])
+      ? (activeStation?.temp || realtimeTemps[townshipKey!])
       : (isViewingCurrent && realtimeTemps[selectedCity])
       ? realtimeTemps[selectedCity]
       : null;
-    const rtWind = (isViewingCurrent && townshipKey && realtimeWinds[townshipKey])
-      ? realtimeWinds[townshipKey]
+    const rtWind = activeStation?.wind || (isViewingCurrent && townshipKey && realtimeWinds[townshipKey])
+      ? (activeStation?.wind || realtimeWinds[townshipKey!])
       : (isViewingCurrent && realtimeWinds[selectedCity])
       ? realtimeWinds[selectedCity]
       : null;
+
+    const isRainingNow = isViewingCurrent && (
+      (activeStation?.rainNow && activeStation.rainNow > 0) ||
+      (activeStation?.weather && (activeStation.weather.includes("雨") || activeStation.weather.includes("陣雨"))) ||
+      (period.weather && (period.weather.includes("雨") || period.weather.includes("陣雨")))
+    );
 
     // 計算精準體感溫度：若為當前實況，依氣象署 Steadman 公式由「實測氣溫 + 相對濕度 + 實測風速」動態計算
     let computedAppTempStr = period.maxApparentTemperature;
     if (isViewingCurrent && rtTemp) {
       const curTempNum = parseFloat(rtTemp);
-      const curRhNum = parseFloat(period.relativeHumidity) || 65;
+      const curRhNum = parseFloat(activeStation?.humidity || period.relativeHumidity) || 65;
       const curWindNum = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
       if (!isNaN(curTempNum)) {
         computedAppTempStr = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
@@ -244,16 +275,16 @@ export function useMobileWeatherData({
       clothIcon = "🧤";
     }
 
-    // 雨具提醒計算（依降雨機率判斷）
+    // 雨具提醒計算（若現場測站回報有雨，或降雨機率 >= 10% 提醒備傘，>= 40% 務必帶傘）
     let umbrellaTip = "無需攜傘";
-    if (popVal >= 50) {
-      umbrellaTip = "務必攜傘";
-    } else if (popVal >= 30) {
-      umbrellaTip = "建議備傘";
+    if (isRainingNow || popVal >= 40) {
+      umbrellaTip = isRainingNow ? "現場有雨 · 務必帶傘" : "務必攜傘";
+    } else if (popVal >= 10) {
+      umbrellaTip = "建議備折疊傘";
     }
 
     // 整合穿衣生活指南小語
-    const livingTip = `${clothIcon} ${clothTitle} · ${clothDetail} · ${popVal >= 30 ? "🌧 " : ""}${umbrellaTip}`;
+    const livingTip = `${clothIcon} ${clothTitle} · ${clothDetail} · ${isRainingNow || popVal >= 10 ? "🌧 " : ""}${umbrellaTip}`;
 
     const metrics: HudMetricItem[] = [
       {
@@ -306,7 +337,18 @@ export function useMobileWeatherData({
     ];
 
     return { metrics, livingTip };
-  }, [period, popStr, selectedPeriodTime, selectedTownship, selectedCity, realtimeTemps, realtimeWinds]);
+  }, [
+    period,
+    popStr,
+    selectedPeriodTime,
+    selectedTownship,
+    selectedCity,
+    realtimeTemps,
+    realtimeWinds,
+    realtimeWeatherMap,
+    townshipStations,
+    userSelectedStations,
+  ]);
 
   // ── 第二頁選中的日期（預設為今天） ──
   const activeForecastDate = useMemo(() => {

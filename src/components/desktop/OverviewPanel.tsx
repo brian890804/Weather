@@ -169,22 +169,44 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
 
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
   const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
+  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
+  const townshipStations = useWeatherStore((s) => s.townshipStations);
+  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
+  const setUserSelectedStation = useWeatherStore((s) => s.setUserSelectedStation);
   const selectedCity = useWeatherStore((s) => s.selectedCity);
   const selectedTownship = useWeatherStore((s) => s.selectedTownship);
   const now = dayjs();
   const isCurrent = now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime));
   const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
-  const realtimeWind = (townshipKey && realtimeWinds[townshipKey]) ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity];
+
+  const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
+  const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
+  const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
+
+  const realtimeTemp = activeStation?.temp || (townshipKey && realtimeTemps[townshipKey] ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity]);
+  const realtimeWind = activeStation?.wind || (townshipKey && realtimeWinds[townshipKey] ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity]);
+  const realtimeStationName = activeStation?.stationName || (townshipKey && realtimeWinds[townshipKey]?.stationName ? realtimeWinds[townshipKey].stationName : null);
+  const realtimeWxText = activeStation?.weather;
+  const realtimeRainNow = activeStation?.rainNow ?? 0;
+
   const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
   const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : period.windSpeed;
   const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : period.windDirection;
   const displayBeaufortScale = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : period.beaufortScale;
 
+  const displayHeroWeather =
+    isCurrent && realtimeWxText
+      ? realtimeWxText
+      : (isCurrent && realtimeRainNow > 0 && period?.weather && !period.weather.includes("雨"))
+      ? `${period.weather}有雨`
+      : period?.weather;
+
+  const isRainingNow = isCurrent && (realtimeRainNow > 0 || (displayHeroWeather && displayHeroWeather.includes("雨")));
+
   let displayApparentTemp = period.maxApparentTemperature;
   if (isCurrent && realtimeTemp) {
     const curTempNum = parseFloat(realtimeTemp);
-    const curRhNum = parseFloat(period.relativeHumidity) || 65;
+    const curRhNum = parseFloat(activeStation?.humidity || period.relativeHumidity) || 65;
     const curWindNum = realtimeWind ? parseFloat(realtimeWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
     if (!isNaN(curTempNum)) {
       displayApparentTemp = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
@@ -200,7 +222,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         label="實測氣溫"
         icon={<ThermostatIcon fontSize="inherit" />}
         color={tempColor(displayTemp)}
-        subtext={isCurrent && realtimeTemp ? (realtimeWind?.stationName ? `即測站：${realtimeWind.stationName}` : '即測站點真實現況') : '預報氣溫'}
+        subtext={isCurrent && realtimeTemp ? (realtimeStationName ? `即測站：${realtimeStationName}` : '即測站點真實現況') : '預報氣溫'}
       />
 
       {/* 2. 體感溫度 */}
@@ -215,12 +237,11 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
 
       {/* 3. 降雨機率 */}
       <CircleStat
-        value={pop !== '-' ? pop : '0'}
-        unit="%"
-        label="降雨機率"
+        value={isRainingNow && parseInt(pop) < 30 ? '現場有雨' : (pop !== '-' ? `${pop}%` : '0%')}
+        label="降雨情況"
         icon={<UmbrellaIcon fontSize="inherit" />}
-        color={popColor(pop)}
-        subtext={parseInt(pop) >= 30 ? '出門建議帶傘' : '降雨機率低'}
+        color={isRainingNow ? '#38BDF8' : popColor(pop)}
+        subtext={isRainingNow ? (realtimeRainNow > 0 ? `累積雨量 ${realtimeRainNow}mm · 務必帶傘` : '測站回報有雨 · 務必帶傘') : (parseInt(pop) >= 40 ? '出門務必帶傘' : parseInt(pop) >= 10 ? '建議備折疊傘' : '降雨機率低')}
       />
 
       {/* 4. 相對濕度 */}
@@ -283,6 +304,9 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
     displayWindSpeed,
     displayWindDirection,
     displayBeaufortScale,
+    realtimeStationName,
+    isRainingNow,
+    realtimeRainNow,
   ]);
 
   return (
@@ -343,8 +367,8 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
           }}
         >
           <WeatherIcon
-            weatherCode={period.weatherCode}
-            weather={period.weather}
+            weatherCode={displayHeroWeather?.includes("雨") ? "08" : period.weatherCode}
+            weather={displayHeroWeather || period.weather}
             startTime={period.startTime}
             size={isMobile ? 80 : 130}
           />
@@ -358,7 +382,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
                 lineHeight: 1.2,
               }}
             >
-              {period.weather}
+              {displayHeroWeather}
             </Typography>
 
             <Typography
@@ -382,8 +406,43 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
                 fontSize: { xs: 13.5, sm: 16, md: 19 },
               }}
             >
-              體感溫度 {period.maxApparentTemperature}°C
+              體感溫度 {displayApparentTemp}°C
             </Typography>
+
+            {/* 即測代表站標籤 (支援多站點選切換) */}
+            {isCurrent && realtimeStationName && (
+              <Box
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (townshipKey && stationsList.length > 1) {
+                    const currentIndex = stationsList.findIndex((st) => st.stationName === realtimeStationName);
+                    const nextIndex = (currentIndex + 1) % stationsList.length;
+                    setUserSelectedStation(townshipKey, stationsList[nextIndex].stationName);
+                  }
+                }}
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  mt: 0.8,
+                  px: 1.2,
+                  py: 0.3,
+                  borderRadius: '12px',
+                  bgcolor: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  cursor: stationsList.length > 1 ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    bgcolor: stationsList.length > 1 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)',
+                  },
+                }}
+              >
+                <Typography sx={{ fontSize: 12, color: '#93C5FD', fontWeight: 600 }}>
+                  📡 觀測站：{realtimeStationName}
+                  {stationsList.length > 1 && ' (點擊切換 ⇄)'}
+                </Typography>
+              </Box>
+            )}
           </Box>
         </Stack>
 

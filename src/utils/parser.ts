@@ -144,10 +144,19 @@ export function parseWeeklyForecastResponse(api: any): Record<string, WeeklyFore
 
       const minT = parseInt(minTEl?.Time?.[i]?.ElementValue?.[0]?.MinTemperature) || 99;
       const maxT = parseInt(maxTEl?.Time?.[i]?.ElementValue?.[0]?.MaxTemperature) || -99;
-      const pop = parseInt(popEl?.Time?.[i]?.ElementValue?.[0]?.ProbabilityOfPrecipitation) || 0;
+      let pop = parseInt(popEl?.Time?.[i]?.ElementValue?.[0]?.ProbabilityOfPrecipitation);
       const wx = t.ElementValue?.[0]?.Weather || '';
       const wxCode = t.ElementValue?.[0]?.WeatherCode || '01';
       const desc = descEl?.Time?.[i]?.ElementValue?.[0]?.WeatherDescription || '';
+      // 若 12小時降雨機率為 '-' 或 NaN，嘗試從天氣描述中解析「降雨機率XX%」
+      if (isNaN(pop) || pop === 0) {
+        const match = desc.match(/降雨機率\s*(\d+)%/);
+        if (match) {
+          pop = parseInt(match[1]);
+        } else if (isNaN(pop)) {
+          pop = 0;
+        }
+      }
 
       if (minT < dayMap[dateStr].minTemp) dayMap[dateStr].minTemp = minT;
       if (maxT > dayMap[dateStr].maxTemp) dayMap[dateStr].maxTemp = maxT;

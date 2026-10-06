@@ -82,6 +82,8 @@ export const CITY_STATION_MAP: Record<string, string> = {
 export interface RealtimeObservationsPayload {
   temps: Record<string, string>;
   winds: Record<string, RealtimeWindData>;
+  realtimeWeather: Record<string, import('../types/weather').RealtimeStationWeather>;
+  townshipStations: Record<string, import('../types/weather').RealtimeStationWeather[]>;
 }
 
 let realtimeInFlightPromise: Promise<RealtimeObservationsPayload> | null = null;
@@ -130,17 +132,27 @@ function getStationScore(st: any, town: string): number {
   let score = 0;
   const id = String(st.StationId || '');
   const name = String(st.StationName || '');
-  // 有人標準氣象署代表站 (46xxx)
-  if (id.startsWith('46')) score += 100;
-  // 站名與鄉鎮名稱吻合 (如 "七堵", "暖暖", "大武崙")
   const cleanTown = town.replace(/區|鄉|鎮|市$/, '');
-  if (name === town || name === cleanTown) score += 60;
-  else if (name.includes(cleanTown)) score += 35;
-  // 離島外海測站稍微降低在鄉鎮內的權重
-  if (name.includes('嶼')) score -= 25;
-  // 排除高速公路或特種監測站（非一般生活氣候）
-  if (name.includes('國一') || name.includes('國三') || name.includes('國道')) score -= 50;
-  if (name.includes('林道') || name.includes('苗圃') || name.includes('橋') || name.includes('收費站')) score -= 30;
+
+  // 1. 站名與鄉鎮名稱吻合 (如 "七堵", "暖暖", "八斗子", "大武崙")
+  if (name === town || name === cleanTown) score += 80;
+  else if (name.includes(cleanTown)) score += 40;
+
+  // 2. 有人標準氣象署測站 (46xxx)
+  // 注意：只有非外海孤島的有人的測站才加分，如果是外海孤島（如彭佳嶼、東吉島、蘭嶼、彭佳嶼）不可優先於本島生活圈
+  const isIsolatedIsland = name.includes('彭佳嶼') || name.includes('基隆嶼') || name.includes('花瓶嶼') || name.includes('棉花嶼') || name.includes('東吉島') || name.includes('東沙') || name.includes('南沙');
+  if (isIsolatedIsland) {
+    score -= 300; // 絕對降權，優先生活圈測站（例如八斗子）
+  } else if (id.startsWith('46')) {
+    score += 50;
+  }
+
+  // 3. 一般離島外海測站降權 (但非孤島如澎湖本島除外)
+  if (name.includes('嶼') && !isIsolatedIsland) score -= 30;
+
+  // 4. 排除高速公路或特種監測站（非一般生活氣候）
+  if (name.includes('國一') || name.includes('國三') || name.includes('國道')) score -= 60;
+  if (name.includes('林道') || name.includes('苗圃') || name.includes('橋') || name.includes('收費站')) score -= 40;
   return score;
 }
 
@@ -157,13 +169,15 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
       const res = await axios.get(url, { timeout: 8000 });
       const stations: any[] = res.data?.records?.Station ?? [];
 
-      const townScoreMap = new Map<string, { score: number; temp: string; wind?: RealtimeWindData; name: string }>();
-      const stationMap = new Map<string, { temp: string; wind?: RealtimeWindData }>();
+      const townScoreMap = new Map<string, { score: number; weatherItem: import('../types/weather').RealtimeStationWeather }>();
+      const townAllStationsMap = new Map<string, import('../types/weather').RealtimeStationWeather[]>();
+      const stationMap = new Map<string, import('../types/weather').RealtimeStationWeather>();
 
       stations.forEach((st) => {
         const c = st.GeoInfo?.CountyName;
         const t = st.GeoInfo?.TownName;
         const name = st.StationName;
+        const id = st.StationId || '';
         const airTemp = st.WeatherElement?.AirTemperature;
         if (airTemp === undefined || airTemp === null || airTemp === '-99' || airTemp === -99) return;
         const tempNum = parseFloat(String(airTemp));
@@ -193,29 +207,59 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
           }
         }
 
+        // 解析現場天氣現象、雨量、相對濕度
+        const rawWx = st.WeatherElement?.Weather;
+        const wxStr = (rawWx && rawWx !== '-99' && rawWx !== 'None') ? String(rawWx).trim() : undefined;
+        const rawPrecip = st.WeatherElement?.Now?.Precipitation;
+        const rainNow = (rawPrecip !== undefined && rawPrecip !== null && rawPrecip !== '-99') ? parseFloat(String(rawPrecip)) : 0;
+        const rawRh = st.WeatherElement?.RelativeHumidity;
+        const humStr = (rawRh !== undefined && rawRh !== null && rawRh !== '-99') ? String(rawRh) : undefined;
+
+        const stationWeatherItem: import('../types/weather').RealtimeStationWeather = {
+          temp: tempStr,
+          wind: windData,
+          weather: wxStr,
+          rainNow: isNaN(rainNow) ? 0 : rainNow,
+          humidity: humStr,
+          stationName: name,
+          stationId: id,
+        };
+
         if (name) {
-          stationMap.set(name, { temp: tempStr, wind: windData });
+          stationMap.set(name, stationWeatherItem);
         }
 
-        // 以「縣市_鄉鎮市區」為最小顆粒度挑選最佳代表測站
+        // 以「縣市_鄉鎮市區」為最小顆粒度挑選最佳代表測站與收集候選測站
         if (c && t) {
           const key = `${c}_${t}`;
+          if (!townAllStationsMap.has(key)) {
+            townAllStationsMap.set(key, []);
+          }
+          townAllStationsMap.get(key)!.push(stationWeatherItem);
+
           const score = getStationScore(st, t);
           if (!townScoreMap.has(key) || (townScoreMap.get(key)!.score < score)) {
-            townScoreMap.set(key, { score, temp: tempStr, wind: windData, name });
+            townScoreMap.set(key, { score, weatherItem: stationWeatherItem });
           }
         }
       });
 
       const temps: Record<string, string> = {};
       const winds: Record<string, RealtimeWindData> = {};
+      const realtimeWeather: Record<string, import('../types/weather').RealtimeStationWeather> = {};
+      const townshipStations: Record<string, import('../types/weather').RealtimeStationWeather[]> = {};
 
-      // 1. 寫入鄉鎮市區級顆粒度（如 基隆市_七堵區, 基隆市_安樂區）
+      // 1. 寫入鄉鎮市區級顆粒度（如 基隆市_中正區 -> 八斗子）
       for (const [key, val] of townScoreMap.entries()) {
-        temps[key] = val.temp;
-        if (val.wind) {
-          winds[key] = val.wind;
+        temps[key] = val.weatherItem.temp;
+        if (val.weatherItem.wind) {
+          winds[key] = val.weatherItem.wind;
         }
+        realtimeWeather[key] = val.weatherItem;
+      }
+
+      for (const [key, list] of townAllStationsMap.entries()) {
+        townshipStations[key] = list;
       }
 
       // 2. 寫入縣市代表站作為 fallback 保底
@@ -226,16 +270,19 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
           if (item.wind) {
             winds[cityName] = item.wind;
           }
+          realtimeWeather[cityName] = item;
         }
       }
 
-      return { temps, winds };
+      return { temps, winds, realtimeWeather, townshipStations };
     } catch (err: any) {
       console.warn('[CWA API] 抓取即測資料 (O-A0001-001) 異常:', err?.message || err);
       const cache = readCache();
       return {
         temps: cache?.realtimeTemps ?? {},
         winds: cache?.realtimeWinds ?? {},
+        realtimeWeather: cache?.realtimeWeather ?? {},
+        townshipStations: cache?.townshipStations ?? {},
       };
     } finally {
       realtimeInFlightPromise = null;
@@ -370,6 +417,8 @@ export function useWeatherData() {
     setWeeklyForecasts,
     setRealtimeTemps,
     setRealtimeWinds,
+    setRealtimeWeather,
+    setTownshipStations,
     setIsLoading,
     setError,
     setLastFetchedAt,
@@ -392,19 +441,33 @@ export function useWeatherData() {
       if (cache.realtimeWinds) {
         setRealtimeWinds(cache.realtimeWinds);
       }
+      if (cache.realtimeWeather) {
+        setRealtimeWeather(cache.realtimeWeather);
+      }
+      if (cache.townshipStations) {
+        setTownshipStations(cache.townshipStations);
+      }
       setLastFetchedAt(cache.fetchedAt);
     }
 
     const apiKey = getCwaApiKey();
 
     // 每次進入頁面：即測真實氣溫與風況 (O-A0001-001) 只有 1 個輕量請求，背景立即打以確保為最新實測
-    fetchRealtimeObservations(apiKey).then(({ temps, winds }) => {
+    fetchRealtimeObservations(apiKey).then(({ temps, winds, realtimeWeather, townshipStations }) => {
       if (temps && Object.keys(temps).length > 0) {
         setRealtimeTemps(temps);
         setRealtimeWinds(winds);
+        setRealtimeWeather(realtimeWeather);
+        setTownshipStations(townshipStations);
         const currentCache = readCache();
         if (currentCache) {
-          writeCache({ ...currentCache, realtimeTemps: temps, realtimeWinds: winds });
+          writeCache({
+            ...currentCache,
+            realtimeTemps: temps,
+            realtimeWinds: winds,
+            realtimeWeather,
+            townshipStations,
+          });
         }
       }
     });
@@ -494,17 +557,25 @@ export function useWeatherData() {
   /** 6. 手動或重新整理拉取 */
   const refetchRealtime = useCallback(async () => {
     const apiKey = getCwaApiKey();
-    const { temps, winds } = await fetchRealtimeObservations(apiKey);
+    const { temps, winds, realtimeWeather, townshipStations } = await fetchRealtimeObservations(apiKey);
     if (temps && Object.keys(temps).length > 0) {
       setRealtimeTemps(temps);
       setRealtimeWinds(winds);
+      setRealtimeWeather(realtimeWeather);
+      setTownshipStations(townshipStations);
       const currentCache = readCache();
       if (currentCache) {
-        writeCache({ ...currentCache, realtimeTemps: temps, realtimeWinds: winds });
+        writeCache({
+          ...currentCache,
+          realtimeTemps: temps,
+          realtimeWinds: winds,
+          realtimeWeather,
+          townshipStations,
+        });
       }
     }
-    return { temps, winds };
-  }, [setRealtimeTemps, setRealtimeWinds]);
+    return { temps, winds, realtimeWeather, townshipStations };
+  }, [setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations]);
 
   const refetch = useCallback(async () => {
     const rtPromise = refetchRealtime();

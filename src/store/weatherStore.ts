@@ -82,6 +82,18 @@ interface WeatherState {
   realtimeWinds: Record<string, import('../types/weather').RealtimeWindData>;
   setRealtimeWinds: (winds: Record<string, import('../types/weather').RealtimeWindData>) => void;
 
+  // 鄉鎮即測站點詳細實況 (包含實測天氣與降雨量)
+  realtimeWeather: Record<string, import('../types/weather').RealtimeStationWeather>;
+  setRealtimeWeather: (weather: Record<string, import('../types/weather').RealtimeStationWeather>) => void;
+
+  // 鄉鎮擁有的所有候選測站列表 (供切換)
+  townshipStations: Record<string, import('../types/weather').RealtimeStationWeather[]>;
+  setTownshipStations: (stations: Record<string, import('../types/weather').RealtimeStationWeather[]>) => void;
+
+  // 使用者手動指定的測站 (key: '縣市_鄉鎮', value: stationName)
+  userSelectedStations: Record<string, string>;
+  setUserSelectedStation: (townshipKey: string, stationName: string) => void;
+
   // 上次更新時間
   lastFetchedAt: string | null;
   setLastFetchedAt: (t: string | null) => void;
@@ -92,6 +104,27 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   setRealtimeTemps: (temps) => set({ realtimeTemps: temps }),
   realtimeWinds: {},
   setRealtimeWinds: (winds) => set({ realtimeWinds: winds }),
+  realtimeWeather: {},
+  setRealtimeWeather: (weather) => set({ realtimeWeather: weather }),
+  townshipStations: {},
+  setTownshipStations: (stations) => set({ townshipStations: stations }),
+  userSelectedStations: (() => {
+    try {
+      const saved = localStorage.getItem('user_selected_stations');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  })(),
+  setUserSelectedStation: (townshipKey, stationName) => {
+    set((state) => {
+      const updated = { ...state.userSelectedStations, [townshipKey]: stationName };
+      try {
+        localStorage.setItem('user_selected_stations', JSON.stringify(updated));
+      } catch {}
+      return { userSelectedStations: updated };
+    });
+  },
   cities: [],
   setCities: (data) => {
     const currentCity = get().selectedCity;

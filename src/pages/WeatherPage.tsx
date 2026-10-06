@@ -223,6 +223,7 @@ export default function WeatherPage() {
             selectedPeriodTime={selectedPeriodTime}
             onSelectPeriod={handleSelectPeriod}
             lastFetchedAt={lastFetchedAt}
+            onRefresh={handleRefresh}
           />
         ) : error ? (
           <Box

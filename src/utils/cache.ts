@@ -125,6 +125,8 @@ function packData(data: CachedData) {
     wf: data.weeklyForecasts,
     rt: data.realtimeTemps,
     rw: data.realtimeWinds,
+    rx: data.realtimeWeather,
+    ts: data.townshipStations,
   };
 }
 
@@ -155,6 +157,8 @@ function unpackData(packed: any): CachedData | null {
     weeklyForecasts: packed.wf || packed.weeklyForecasts || undefined,
     realtimeTemps: packed.rt || packed.realtimeTemps || undefined,
     realtimeWinds: packed.rw || packed.realtimeWinds || undefined,
+    realtimeWeather: packed.rx || packed.realtimeWeather || undefined,
+    townshipStations: packed.ts || packed.townshipStations || undefined,
   };
 }
 

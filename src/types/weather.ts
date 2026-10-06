@@ -116,12 +116,24 @@ export interface RealtimeWindData {
   stationName?: string;      // e.g. "大武崙"
 }
 
+export interface RealtimeStationWeather {
+  temp: string;              // e.g. "21.7"
+  wind?: RealtimeWindData;
+  weather?: string;          // e.g. "陰有雨", "短暫陣雨", "陰"
+  rainNow?: number;          // e.g. 2.0 (mm)
+  humidity?: string;         // e.g. "94"
+  stationName: string;       // e.g. "八斗子"
+  stationId: string;         // e.g. "C0B050"
+}
+
 export interface CachedData {
   fetchedAt: string; // ISO string
   cities: ParsedCityData[];
   weeklyForecasts?: Record<string, WeeklyForecastDay[]>;
   realtimeTemps?: Record<string, string>;
   realtimeWinds?: Record<string, RealtimeWindData>;
+  realtimeWeather?: Record<string, RealtimeStationWeather>;
+  townshipStations?: Record<string, RealtimeStationWeather[]>;
   [key: string]: any;
 }
 

@@ -81,11 +81,11 @@ export default function MobilePage2({
               textShadow: `0 0 12px ${sky.neonPrimary}66`,
             }}
           >
-            ⚡ 未來 7 天氣象趨勢
+            ⚡ 未來 6 天氣象趨勢
           </Typography>
         </Box>
 
-        {/* 1. 未來 7 天天氣預報 (7 日氣象清單) */}
+        {/* 1. 未來 6 天天氣預報 (6 日氣象清單) */}
         <MobileSevenDayList
           dailyList={dailyList}
           activeForecastDate={activeForecastDate}

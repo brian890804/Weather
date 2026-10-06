@@ -122,22 +122,33 @@ export function computeActiveDayDetails(
     };
   }
 
+  // ── 雨具與外出活動邏輯（與 Page 1 嚴格一致：只要天氣文字含「雨」或機率達標即判定帶傘） ──
+  const isRainingCondition =
+    (repPeriod?.weather && (repPeriod.weather.includes("雨") || repPeriod.weather.includes("陣雨"))) ||
+    (activeDayForecast.weather && (activeDayForecast.weather.includes("雨") || activeDayForecast.weather.includes("陣雨"))) ||
+    popVal >= 40;
+
+  const needUmbrella = isRainingCondition || popVal >= 10;
+
+  const rainTipValue = isRainingCondition
+    ? (repPeriod?.weather?.includes("陣雨") || activeDayForecast.weather?.includes("陣雨") ? "🌧 陣雨必備雨具" : "🌧 務必攜傘")
+    : popVal >= 40
+      ? "🌧 務必攜傘"
+      : popVal >= 10
+        ? "☂️ 建議備傘（可備折疊傘）"
+        : "☀️ 無需攜傘";
+
   const tips = [
     {
       key: "rain",
       label: "雨具提醒",
-      value:
-        popVal >= 50
-          ? "🌧 務必攜傘"
-          : popVal >= 30
-            ? "☂️ 建議備傘"
-            : "☀️ 無需攜傘",
-      color: popVal >= 30 ? "#7DD3FC" : "#34D399",
+      value: rainTipValue,
+      color: needUmbrella ? "#7DD3FC" : "#34D399",
     },
     {
       key: "activity",
       label: "戶外活動",
-      value: popVal < 30 ? "🏃 適合外出" : "🏠 建議待室內",
+      value: !needUmbrella && popVal < 20 ? "🏃 適合外出" : "🏠 留意天氣／室內為宜",
       color: skyTextPrimary,
     },
   ];
@@ -160,11 +171,13 @@ export function computeActiveDayDetails(
       label: "降雨機率",
       value: `${popVal}%`,
       sub:
-        popVal >= 50
-          ? "建議攜帶雨具"
-          : popVal >= 20
-            ? "局部短暫陣雨"
-            : "降雨機率低",
+        isRainingCondition
+          ? "有雨 · 建議攜帶雨具"
+          : popVal >= 40
+            ? "外出務必帶傘"
+            : popVal >= 10
+              ? "建議備折疊傘"
+              : "降雨機率低",
     },
     {
       key: "wind",

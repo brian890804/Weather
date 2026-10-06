@@ -45,23 +45,32 @@ export function getWeatherIconName(
     '34': 'snow',                    // 雪
   };
 
-  // 先嘗試 code map
-  if (codeMap[code]) {
-    return codeMap[code];
-  }
-
-  // fallback: 解析文字
+  // 先檢查天氣文字是否明確帶有「雨」或「雷」
+  // 若測站或實況文字回報「陰有雨」、「短暫雨」或代碼對應雨天，優先使用動態下雨圖示
   const w = weather || '';
+  if (w.includes('雷') && w.includes('雨')) return isNight ? 'thunderstorms-night-rain' : 'thunderstorms-day-rain';
   if (w.includes('雷')) return isNight ? 'thunderstorms-night' : 'thunderstorms-day';
   if (w.includes('雪')) return 'snow';
   if (w.includes('雨夾雪') || w.includes('夾雪')) return 'sleet';
   if (w.includes('大雨') || w.includes('豪雨')) return 'rain';
-  if (w.includes('陣雨') || w.includes('短暫雨')) return isNight ? 'overcast-night-rain' : 'overcast-day-rain';
-  if (w.includes('雨')) return 'rain';
+  if (w.includes('毛毛雨') || w.includes('細雨') || w.includes('有靄')) return isNight ? 'overcast-night-drizzle' : 'overcast-day-drizzle';
+  if (w.includes('陣雨') || w.includes('短暫雨') || w.includes('有雨')) {
+    if (w.includes('晴') || w.includes('多雲時晴')) return isNight ? 'partly-cloudy-night-rain' : 'partly-cloudy-day-rain';
+    return isNight ? 'overcast-night-rain' : 'overcast-day-rain';
+  }
+  if (w.includes('雨')) return isNight ? 'overcast-night-rain' : 'overcast-day-rain';
+
+  // 檢查代碼對應
+  if (codeMap[code]) {
+    return codeMap[code];
+  }
+
+  // fallback: 純無雨天氣解析
   if (w.includes('霧') || w.includes('霾') || w.includes('靄')) return isNight ? 'fog-night' : 'fog-day';
   if (w.includes('晴時多雲') || w.includes('晴間多雲')) return isNight ? 'mostly-clear-night' : 'mostly-clear-day';
   if (w.includes('多雲時晴')) return isNight ? 'partly-cloudy-night' : 'partly-cloudy-day';
-  if (w.includes('陰') || w.includes('多雲')) return isNight ? 'overcast-night' : 'overcast-day';
+  if (w.includes('陰')) return isNight ? 'overcast-night' : 'overcast-day';
+  if (w.includes('多雲')) return isNight ? 'overcast-night' : 'overcast-day';
   if (w.includes('晴')) return isNight ? 'clear-night' : 'clear-day';
 
   return isNight ? 'partly-cloudy-night' : 'partly-cloudy-day';

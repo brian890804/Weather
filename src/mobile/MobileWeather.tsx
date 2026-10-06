@@ -28,6 +28,7 @@ export default function MobileWeather({
   selectedPeriodTime,
   onSelectPeriod,
   lastFetchedAt,
+  onRefresh,
 }: MobileWeatherProps) {
   const [activePage, setActivePage] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -168,6 +169,7 @@ export default function MobileWeather({
           lastFetchedAt={lastFetchedAt}
           onGoToPage2={() => goTo(1)}
           sky={sky}
+          onRefresh={onRefresh}
         />
 
         {/* PAGE 2：全方位氣象趨勢與生活指南 */}

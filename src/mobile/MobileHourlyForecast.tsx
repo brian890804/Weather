@@ -23,15 +23,27 @@ export default function MobileHourlyForecast({
   sky,
 }: MobileHourlyForecastProps) {
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
+  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
+  const townshipStations = useWeatherStore((s) => s.townshipStations);
+  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
   const selectedCity = useWeatherStore((s) => s.selectedCity);
   const selectedTownship = useWeatherStore((s) => s.selectedTownship);
   const townshipKey = selectedTownship
     ? `${selectedCity}_${selectedTownship}`
     : null;
+
+  const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
+  const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
+  const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
+
   const realtimeTemp =
-    townshipKey && realtimeTemps[townshipKey]
+    activeStation?.temp ||
+    (townshipKey && realtimeTemps[townshipKey]
       ? realtimeTemps[townshipKey]
-      : realtimeTemps[selectedCity];
+      : realtimeTemps[selectedCity]);
+  const realtimeWxText = activeStation?.weather;
+  const realtimeRainNow = activeStation?.rainNow ?? 0;
+  const isRealtimeRaining = Boolean(realtimeWxText?.includes("雨") || realtimeRainNow > 0);
 
   return (
     <Box
@@ -173,8 +185,8 @@ export default function MobileHourlyForecast({
                 }}
               >
                 <WeatherIcon
-                  weatherCode={p.weatherCode}
-                  weather={p.weather}
+                  weatherCode={isCur && isRealtimeRaining ? "08" : p.weatherCode}
+                  weather={isCur && realtimeWxText ? realtimeWxText : (isCur && realtimeRainNow > 0 ? `${p.weather}有雨` : p.weather)}
                   startTime={p.startTime}
                   size={50}
                 />

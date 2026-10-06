@@ -17,6 +17,7 @@ export interface MobileWeatherProps {
   selectedPeriodTime: string | null;
   onSelectPeriod: (startTime: string) => void;
   lastFetchedAt: string | null;
+  onRefresh?: () => Promise<void>;
 }
 
 export interface DayForecast {

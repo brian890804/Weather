@@ -178,9 +178,9 @@ export function useMobileWeatherData({
   const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
   const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
 
-  // ── 第一頁 4 大指標 (Cyberpunk HUD 圓形儀表) ──
-  const page1Metrics: HudMetricItem[] = useMemo(() => {
-    if (!period) return [];
+  // ── 第一頁 4 大指標 (Cyberpunk HUD 圓形儀表) 與生活小語 ──
+  const page1Data = useMemo(() => {
+    if (!period) return { metrics: [], livingTip: "" };
 
     const now = dayjs();
     const isViewingCurrent = !selectedPeriodTime || (now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime)));
@@ -218,7 +218,44 @@ export function useMobileWeatherData({
     const windSpeedText = rtWind ? `${rtWind.windSpeed}m/s` : `${period.windSpeed}m/s`;
     const windPercent = Math.min(100, Math.max(15, (windVal / 15) * 100));
 
-    return [
+    // 穿衣生活指南計算（依體感溫度判斷）
+    let clothTitle = "短袖輕裝";
+    let clothDetail = "純棉短袖，天氣宜人";
+    let clothIcon = "👕";
+    if (appTemp >= 30) {
+      clothTitle = "清涼透氣";
+      clothDetail = "短袖為宜，注意防曬補水";
+      clothIcon = "☀️";
+    } else if (appTemp >= 25) {
+      clothTitle = "短袖輕裝";
+      clothDetail = "短袖衣物，通風舒適";
+      clothIcon = "👕";
+    } else if (appTemp >= 20) {
+      clothTitle = "薄款外套";
+      clothDetail = "建議加薄外套或薄長袖";
+      clothIcon = "🧥";
+    } else if (appTemp >= 15) {
+      clothTitle = "保暖衣物";
+      clothDetail = "長袖毛衣或風衣保暖";
+      clothIcon = "🧣";
+    } else {
+      clothTitle = "厚實防寒";
+      clothDetail = "羽絨厚外套，注意防寒";
+      clothIcon = "🧤";
+    }
+
+    // 雨具提醒計算（依降雨機率判斷）
+    let umbrellaTip = "無需攜傘";
+    if (popVal >= 50) {
+      umbrellaTip = "務必攜傘";
+    } else if (popVal >= 30) {
+      umbrellaTip = "建議備傘";
+    }
+
+    // 整合穿衣生活指南小語
+    const livingTip = `${clothIcon} ${clothTitle} · ${clothDetail} · ${popVal >= 30 ? "🌧 " : ""}${umbrellaTip}`;
+
+    const metrics: HudMetricItem[] = [
       {
         key: "apparentTemp",
         label: "體感",
@@ -267,6 +304,8 @@ export function useMobileWeatherData({
         miniIcon: React.createElement(AirIcon, { sx: { fontSize: 20 } }),
       },
     ];
+
+    return { metrics, livingTip };
   }, [period, popStr, selectedPeriodTime, selectedTownship, selectedCity, realtimeTemps, realtimeWinds]);
 
   // ── 第二頁選中的日期（預設為今天） ──
@@ -300,10 +339,14 @@ export function useMobileWeatherData({
     );
   }, [activeDayForecast, periods, period, skyTextPrimary]);
 
+  const page1Metrics = page1Data.metrics;
+  const livingTip = page1Data.livingTip;
+
   return {
     dailyList,
     dayHighLow,
     page1Metrics,
+    livingTip,
     activeForecastDate,
     activeDayForecast,
     activeDayDetails,

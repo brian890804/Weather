@@ -10,7 +10,7 @@ interface MobileHudMetricsProps {
 
 export default function MobileHudMetrics({
   metrics,
-  sky,
+  sky: _sky,
 }: MobileHudMetricsProps) {
   return (
     <Box
@@ -18,9 +18,9 @@ export default function MobileHudMetrics({
         width: "100%",
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
-        gap: { xs: "6px", sm: "12px" },
-        mt: 1.2,
-        mb: 0.5,
+        gap: { xs: 0.8, sm: 1.5 },
+        mt: { xs: 1, sm: 1.5 },
+        mb: { xs: 0.5, sm: 0.8 },
         px: 0.25,
         // 外圈虛線慢速旋轉
         "@keyframes hudRotate": {
@@ -36,16 +36,16 @@ export default function MobileHudMetrics({
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: "5px",
+            gap: "4px",
             py: "2px",
           }}
         >
-          {/* 圓形 Cyberpunk HUD 儀表圈（放大尺寸） */}
+          {/* 圓形 Cyberpunk HUD 儀表圈（3 個一排，寬高約 78~84px） */}
           <Box
             sx={{
               position: "relative",
-              width: { xs: 86, sm: 94 },
-              height: { xs: 86, sm: 94 },
+              width: { xs: 78, sm: 84 },
+              height: { xs: 78, sm: 84 },
               display: "flex",
               alignItems: "center",
               justifyContent: "center",

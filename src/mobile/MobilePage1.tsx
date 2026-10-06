@@ -19,6 +19,7 @@ interface MobilePage1Props {
   period: WeatherPeriod | null;
   dayHighLow: { max: string; min: string };
   page1Metrics: HudMetricItem[];
+  livingTip?: string;
   periods: WeatherPeriod[];
   autoCurrentPeriod: WeatherPeriod | null;
   selectedPeriodTime: string | null;
@@ -36,6 +37,7 @@ export default function MobilePage1({
   period,
   dayHighLow,
   page1Metrics,
+  livingTip,
   periods,
   autoCurrentPeriod,
   selectedPeriodTime,
@@ -261,13 +263,13 @@ export default function MobilePage1({
               alignItems: "center",
               justifyContent: "center",
               height: 16,
-              mb: 0.25,
+              mb: 0.5,
             }}
           >
             <Typography
               sx={{
-                fontSize: 14,
-                color: "grey",
+                fontSize: 13,
+                color: "rgba(255, 255, 255, 0.45)",
                 fontWeight: 500,
                 letterSpacing: 0.3,
               }}
@@ -278,6 +280,38 @@ export default function MobilePage1({
                 : dayjs().format("HH:mm")}
             </Typography>
           </Box>
+
+          {/* 方案 B：動態穿衣與生活指南提示膠囊列 (微光玻璃晶片) */}
+          {livingTip && (
+            <Box
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.75,
+                px: 1.5,
+                py: 0.5,
+                mt: 0.25,
+                borderRadius: "16px",
+                background: "rgba(255, 255, 255, 0.08)",
+                border: "1px solid rgba(255, 255, 255, 0.16)",
+                backdropFilter: "blur(12px)",
+                boxShadow: `0 2px 10px rgba(0,0,0,0.2), inset 0 0 12px ${sky.neonPrimary}15`,
+                animation: "fadeIn 0.4s ease",
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: { xs: 13, sm: 14 },
+                  fontWeight: 700,
+                  color: sky.textPrimary,
+                  letterSpacing: 0.4,
+                  textShadow: `0 0 8px ${sky.neonPrimary}33`,
+                }}
+              >
+                {livingTip}
+              </Typography>
+            </Box>
+          )}
         </Box>
       )}
 

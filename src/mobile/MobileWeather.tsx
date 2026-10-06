@@ -49,6 +49,7 @@ export default function MobileWeather({
     dailyList,
     dayHighLow,
     page1Metrics,
+    livingTip,
     activeForecastDate,
     activeDayDetails,
   } = useMobileWeatherData({
@@ -159,6 +160,7 @@ export default function MobileWeather({
           period={period}
           dayHighLow={dayHighLow}
           page1Metrics={page1Metrics}
+          livingTip={livingTip}
           periods={periods}
           autoCurrentPeriod={autoCurrentPeriod}
           selectedPeriodTime={selectedPeriodTime}

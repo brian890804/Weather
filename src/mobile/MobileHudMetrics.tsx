@@ -58,14 +58,14 @@ export default function MobileHudMetrics({
               viewBox="0 0 80 80"
               style={{ position: "absolute", inset: 0 }}
             >
-              {/* 內底暗層 (Cyberpunk 玻璃黑底) */}
+              {/* 內底暗層 (清透毛玻璃微透黑底) */}
               <circle
                 cx="40"
                 cy="40"
                 r="31"
-                fill="rgba(10, 20, 35, 0.65)"
-                stroke="rgba(255, 255, 255, 0.1)"
-                strokeWidth="2.5"
+                fill="rgba(255, 255, 255, 0.04)"
+                stroke="rgba(255, 255, 255, 0.12)"
+                strokeWidth="2"
               />
               {/* 外圈科技點狀刻度 (慢速旋轉科技雷達轉盤 - 保留旋轉動畫) */}
               <circle

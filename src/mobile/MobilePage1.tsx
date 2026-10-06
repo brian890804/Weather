@@ -139,8 +139,8 @@ export default function MobilePage1({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       sx={{
-        position: "absolute",
-        inset: 0,
+        width: "100%",
+        height: "100%",
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",
@@ -153,13 +153,7 @@ export default function MobilePage1({
         pt: "env(safe-area-inset-top, 16px)",
         pb: "max(8px, env(safe-area-inset-bottom, 8px))",
         overflow: "hidden",
-        transform: active ? "translateY(0%)" : "translateY(-100%)",
-        opacity: active ? 1 : 0,
-        pointerEvents: active ? "auto" : "none",
-        transition: isRefreshing
-          ? "none"
-          : "transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.28s ease",
-        willChange: "transform, opacity",
+        position: "relative",
       }}
     >
       {/* ── 下拉更新發光霓虹頂部提示區塊 ── */}

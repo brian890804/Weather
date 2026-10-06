@@ -115,8 +115,10 @@ export default function MobileHourlyForecast({
           display: "flex",
           gap: "8px",
           overflowX: "auto",
-          touchAction: "pan-x",
+          overflowY: "hidden",
+          touchAction: "pan-x pan-y",
           overscrollBehaviorX: "contain",
+          overscrollBehaviorY: "auto",
           scrollSnapType: "x mandatory",
           "&::-webkit-scrollbar": { display: "none" },
           pb: "2px",
@@ -147,14 +149,16 @@ export default function MobileHourlyForecast({
                 px: "2px",
                 gap: "2px",
                 background: isSel
-                  ? `linear-gradient(135deg, ${sky.neonPrimary}38 0%, ${sky.neonSecondary}1f 100%)`
+                  ? `linear-gradient(135deg, ${sky.neonPrimary}2b 0%, rgba(255, 255, 255, 0.05) 100%)`
                   : sky.cardItemGradient,
                 border: isSel
-                  ? `1px solid ${sky.neonPrimary}99`
+                  ? `1px solid ${sky.neonPrimary}aa`
                   : `1px solid ${sky.dimBorder}`,
                 boxShadow: isSel
-                  ? `0 0 14px ${sky.neonPrimary}4d`
-                  : "0 2px 6px rgba(0,0,0,0.18)",
+                  ? `0 0 16px ${sky.neonPrimary}44, inset 0 0 10px ${sky.neonPrimary}1f`
+                  : "0 2px 8px rgba(0, 0, 0, 0.14)",
+                backdropFilter: "blur(20px) saturate(150%)",
+                WebkitBackdropFilter: "blur(20px) saturate(150%)",
                 cursor: "pointer",
                 transition: "all 0.15s ease",
                 WebkitTapHighlightColor: "transparent",

@@ -62,9 +62,7 @@ export default function MobileWeather({
     skyTextPrimary: sky.textPrimary,
   });
 
-  const touchStartY = useRef<number | null>(null);
-  const touchStartX = useRef<number | null>(null);
-  const page2Ref = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // ── 手機全屏 APP 模式：掛載時鎖定外層 body 捲動，卸載時立即還原給電腦版 ──
   useEffect(() => {
@@ -78,38 +76,36 @@ export default function MobileWeather({
     };
   }, []);
 
-  // ── 兩頁完全切割切換 (0: 天氣焦點首頁, 1: 完整趨勢與生活指南) ──
-  const goTo = useCallback((idx: number) => {
-    const target = Math.min(1, Math.max(0, idx));
-    if (target === 1 && page2Ref.current) {
+  const page2Ref = useRef<HTMLDivElement | null>(null);
+
+  // 程式化捲動至指定頁面（第 0 頁或第 1 頁）
+  const scrollToPage = useCallback((idx: number) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const pageHeight = container.clientHeight;
+    if (idx === 1 && page2Ref.current) {
       page2Ref.current.scrollTop = 0;
     }
-    setActivePage(target);
+    container.scrollTo({
+      top: idx * pageHeight,
+      behavior: "smooth",
+    });
   }, []);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null || touchStartX.current === null) return;
-    const diffY = touchStartY.current - e.changedTouches[0].clientY;
-    const diffX = touchStartX.current - e.changedTouches[0].clientX;
-    touchStartY.current = null;
-    touchStartX.current = null;
-
-    // 垂直滑動優先判斷 (避免逐 3 小時橫向滑動誤觸)
-    if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 40) {
-      if (diffY > 0 && activePage === 0) {
-        goTo(1);
-      } else if (diffY < 0 && activePage === 1) {
-        if (!page2Ref.current || page2Ref.current.scrollTop <= 8) {
-          goTo(0);
-        }
+  // 監聽外層滾動，更新目前 activePage 狀態，並在滑到第 2 頁時確保從頂部開始看
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const pageHeight = container.clientHeight;
+    if (pageHeight <= 0) return;
+    const currentIdx = Math.round(container.scrollTop / pageHeight);
+    if (currentIdx !== activePage && (currentIdx === 0 || currentIdx === 1)) {
+      if (currentIdx === 1 && activePage === 0 && page2Ref.current) {
+        page2Ref.current.scrollTop = 0;
       }
+      setActivePage(currentIdx);
     }
-  };
+  }, [activePage]);
 
   return (
     <Box
@@ -123,7 +119,8 @@ export default function MobileWeather({
         transition: "background 0.7s ease",
       }}
     >
-      {/* 大氣背景光暈 */}
+      {/* ── Cyberpunk 動態天氣背景光暈與環境光斑層 ── */}
+      {/* 1. 全域深層漸層背景光暈 */}
       <Box
         sx={{
           position: "absolute",
@@ -131,17 +128,61 @@ export default function MobileWeather({
           background: sky.glow,
           pointerEvents: "none",
           zIndex: 0,
-          transition: "background 0.7s ease",
+          transition: "background 0.8s ease",
+        }}
+      />
+
+      {/* 2. 動態 Cyberpunk 呼吸光斑 (右上角主霓虹光斑) */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: "-10%",
+          right: "-15%",
+          width: { xs: 340, sm: 420 },
+          height: { xs: 340, sm: 420 },
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${sky.neonPrimary}59 0%, ${sky.neonSecondary}26 50%, transparent 70%)`,
+          filter: "blur(60px)",
+          pointerEvents: "none",
+          zIndex: 0,
+          animation: "auroraPulseTop 8s ease-in-out infinite alternate",
+          "@keyframes auroraPulseTop": {
+            "0%": { transform: "translate(0, 0) scale(1)", opacity: 0.85 },
+            "50%": { transform: "translate(-20px, 25px) scale(1.15)", opacity: 1 },
+            "100%": { transform: "translate(15px, -15px) scale(0.95)", opacity: 0.75 },
+          },
+        }}
+      />
+
+      {/* 3. 動態 Cyberpunk 呼吸光斑 (左下角次霓虹光斑) */}
+      <Box
+        sx={{
+          position: "absolute",
+          bottom: "5%",
+          left: "-20%",
+          width: { xs: 320, sm: 400 },
+          height: { xs: 320, sm: 400 },
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${sky.neonSecondary}4d 0%, ${sky.neonPrimary}20 50%, transparent 70%)`,
+          filter: "blur(70px)",
+          pointerEvents: "none",
+          zIndex: 0,
+          animation: "auroraPulseBottom 10s ease-in-out infinite alternate",
+          "@keyframes auroraPulseBottom": {
+            "0%": { transform: "translate(0, 0) scale(1)", opacity: 0.7 },
+            "50%": { transform: "translate(25px, -20px) scale(1.12)", opacity: 0.95 },
+            "100%": { transform: "translate(-15px, 15px) scale(0.9)", opacity: 0.65 },
+          },
         }}
       />
 
       {/* 動態天氣環境光效 (雨天雨絲流動、大太陽斜向光束微光、雲霧流動) */}
       <WeatherAmbientEffects weatherType={sky.weatherType} />
 
-      {/* ── APP 主內容區 (底部導航已移除，貼底延展無黑邊/留白) ── */}
+      {/* ── APP 主內容區：原生垂直滾動貼合容器 (CSS Scroll Snap: y mandatory) ── */}
       <Box
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
         sx={{
           position: "absolute",
           top: 0,
@@ -149,40 +190,68 @@ export default function MobileWeather({
           right: 0,
           bottom: 0,
           zIndex: 1,
-          overflow: "hidden",
+          overflowY: "auto",
+          overflowX: "hidden",
+          scrollSnapType: "y mandatory",
+          scrollBehavior: "smooth",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorY: "contain",
+          "&::-webkit-scrollbar": { display: "none" },
         }}
       >
-        {/* PAGE 1：即時氣象核心看板 */}
-        <MobilePage1
-          active={activePage === 0}
-          selectedCity={selectedCity}
-          selectedTownship={selectedTownship}
-          onOpenLocation={() => setLocationOpen(true)}
-          period={period}
-          dayHighLow={dayHighLow}
-          page1Metrics={page1Metrics}
-          livingTip={livingTip}
-          periods={periods}
-          autoCurrentPeriod={autoCurrentPeriod}
-          selectedPeriodTime={selectedPeriodTime}
-          onSelectPeriod={onSelectPeriod}
-          lastFetchedAt={lastFetchedAt}
-          onGoToPage2={() => goTo(1)}
-          sky={sky}
-          onRefresh={onRefresh}
-        />
+        {/* PAGE 1：即時氣象核心看板 (Scroll Snap 項目 1) */}
+        <Box
+          sx={{
+            width: "100%",
+            height: "100dvh",
+            scrollSnapAlign: "start",
+            scrollSnapStop: "always",
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          <MobilePage1
+            active={activePage === 0}
+            selectedCity={selectedCity}
+            selectedTownship={selectedTownship}
+            onOpenLocation={() => setLocationOpen(true)}
+            period={period}
+            dayHighLow={dayHighLow}
+            page1Metrics={page1Metrics}
+            livingTip={livingTip}
+            periods={periods}
+            autoCurrentPeriod={autoCurrentPeriod}
+            selectedPeriodTime={selectedPeriodTime}
+            onSelectPeriod={onSelectPeriod}
+            lastFetchedAt={lastFetchedAt}
+            onGoToPage2={() => scrollToPage(1)}
+            sky={sky}
+            onRefresh={onRefresh}
+          />
+        </Box>
 
-        {/* PAGE 2：全方位氣象趨勢與生活指南 */}
-        <MobilePage2
-          active={activePage === 1}
-          pageRef={page2Ref}
-          dailyList={dailyList}
-          activeForecastDate={activeForecastDate}
-          onSelectForecastDate={(dateStr) => setSelectedForecastDate(dateStr)}
-          activeDayDetails={activeDayDetails}
-          onGoToPage1={() => goTo(0)}
-          sky={sky}
-        />
+        {/* PAGE 2：全方位氣象趨勢與生活指南 (Scroll Snap 項目 2) */}
+        <Box
+          sx={{
+            width: "100%",
+            height: "100dvh",
+            scrollSnapAlign: "start",
+            scrollSnapStop: "always",
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          <MobilePage2
+            pageRef={page2Ref}
+            active={activePage === 1}
+            dailyList={dailyList}
+            activeForecastDate={activeForecastDate}
+            onSelectForecastDate={(dateStr) => setSelectedForecastDate(dateStr)}
+            activeDayDetails={activeDayDetails}
+            onGoToPage1={() => scrollToPage(0)}
+            sky={sky}
+          />
+        </Box>
       </Box>
 
       {/* 地點選單 */}

@@ -29,10 +29,11 @@ export default function BentoCard({
       onClick={onClick}
       sx={{
         p: "14px 12px",
-        borderRadius: "10px",
+        borderRadius: "12px",
         background: sky.cardItemGradient,
         border: `1px solid ${sky.dimBorder}`,
-        backdropFilter: "blur(20px)",
+        backdropFilter: "blur(24px) saturate(160%)",
+        WebkitBackdropFilter: "blur(24px) saturate(160%)",
         display: "flex",
         flexDirection: "column",
         gap: "10px",
@@ -42,7 +43,7 @@ export default function BentoCard({
         userSelect: "none",
         transition: "all 0.2s ease",
         WebkitTapHighlightColor: "transparent",
-        boxShadow: "0 0 16px rgba(0, 240, 255, 0.05)",
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
         "&:active": onClick ? { transform: "scale(0.97)" } : {},
       }}
     >

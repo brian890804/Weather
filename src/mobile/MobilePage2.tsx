@@ -8,8 +8,8 @@ import MobileClothingGuide from "./MobileClothingGuide";
 import type { DayForecast, ActiveDayDetails, SkyTheme } from "./types";
 
 interface MobilePage2Props {
-  active: boolean;
-  pageRef: React.RefObject<HTMLDivElement | null>;
+  active?: boolean;
+  pageRef?: React.RefObject<HTMLDivElement | null>;
   dailyList: DayForecast[];
   activeForecastDate: string;
   onSelectForecastDate: (dateStr: string) => void;
@@ -19,7 +19,6 @@ interface MobilePage2Props {
 }
 
 export default function MobilePage2({
-  active,
   pageRef,
   dailyList,
   activeForecastDate,
@@ -29,23 +28,35 @@ export default function MobilePage2({
   sky,
 }: MobilePage2Props) {
   const page2BentoCards = activeDayDetails?.bentoCards || [];
+  const touchStartY = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartY.current = null;
+    // 當 Page 2 已經在最頂端 (scrollTop <= 5)，且使用者向下拉動超過 45px 時，順暢滾動回 Page 1
+    if (diffY > 45 && pageRef?.current && pageRef.current.scrollTop <= 5) {
+      onGoToPage1();
+    }
+  };
 
   return (
     <Box
       ref={pageRef}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       sx={{
-        position: "absolute",
-        inset: 0,
+        width: "100%",
+        height: "100%",
         overflowY: "auto",
-        overscrollBehaviorY: "contain",
+        overscrollBehaviorY: "auto",
         WebkitOverflowScrolling: "touch",
         "&::-webkit-scrollbar": { display: "none" },
-        transform: active ? "translateY(0%)" : "translateY(100%)",
-        opacity: active ? 1 : 0,
-        pointerEvents: active ? "auto" : "none",
-        transition:
-          "transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.28s ease",
-        willChange: "transform, opacity",
+        position: "relative",
       }}
     >
       {/* 內部彈性排版容器：徹底解決行動端 Flex 滾動高度截斷問題 */}
@@ -83,6 +94,37 @@ export default function MobilePage2({
           >
             ⚡ 未來 6 天氣象趨勢
           </Typography>
+
+          {/* 頂部快速返回第 1 頁膠囊按鈕 */}
+          <Box
+            onClick={onGoToPage1}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              px: "10px",
+              py: "3px",
+              borderRadius: "16px",
+              background: sky.cardItemGradient,
+              border: `1px solid ${sky.dimBorder}`,
+              backdropFilter: "blur(12px)",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+              WebkitTapHighlightColor: "transparent",
+              "&:active": { transform: "scale(0.95)" },
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: sky.textPrimary,
+                lineHeight: 1.2,
+              }}
+            >
+              ↑ 回到今日
+            </Typography>
+          </Box>
         </Box>
 
         {/* 1. 未來 6 天天氣預報 (6 日氣象清單) */}

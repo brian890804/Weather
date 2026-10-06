@@ -19,11 +19,12 @@ export default function MobileClothingGuide({
   return (
     <Box
       sx={{
-        borderRadius: "12px",
+        borderRadius: "16px",
         background: sky.cardGradient,
-        border: `1px solid ${sky.neonPrimary}4d`,
-        boxShadow: `0 0 24px ${sky.neonPrimary}14`,
-        backdropFilter: "blur(20px)",
+        border: `1px solid ${sky.dimBorder}`,
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+        backdropFilter: "blur(24px) saturate(160%)",
+        WebkitBackdropFilter: "blur(24px) saturate(160%)",
         p: { xs: "12px 10px", sm: "16px 14px" },
         flexShrink: 0,
       }}

@@ -23,11 +23,12 @@ export default function MobileSevenDayList({
   return (
     <Box
       sx={{
-        borderRadius: "12px",
+        borderRadius: "16px",
         background: sky.cardGradient,
-        border: `1px solid ${sky.neonPrimary}4d`,
-        boxShadow: `0 0 24px ${sky.neonPrimary}14`,
-        backdropFilter: "blur(20px)",
+        border: `1px solid ${sky.dimBorder}`,
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+        backdropFilter: "blur(24px) saturate(160%)",
+        WebkitBackdropFilter: "blur(24px) saturate(160%)",
         p: { xs: "12px 10px", sm: "16px 14px" },
         flexShrink: 0,
       }}
@@ -46,16 +47,16 @@ export default function MobileSevenDayList({
                 alignItems: "center",
                 py: "14px",
                 px: { xs: "8px", sm: "12px" },
-                borderRadius: "8px",
+                borderRadius: "10px",
                 background: isSelected
-                  ? `linear-gradient(135deg, ${sky.neonPrimary}33 0%, ${sky.neonSecondary}1a 100%)`
+                  ? `linear-gradient(135deg, ${sky.neonPrimary}2e 0%, rgba(255, 255, 255, 0.04) 100%)`
                   : sky.cardItemGradient,
                 border: `1px solid ${
-                  isSelected ? `${sky.neonPrimary}99` : `${sky.neonPrimary}18`
+                  isSelected ? `${sky.neonPrimary}aa` : sky.dimBorder
                 }`,
                 boxShadow: isSelected
-                  ? `0 0 14px ${sky.neonPrimary}3d`
-                  : "0 2px 6px rgba(0,0,0,0.15)",
+                  ? `0 0 16px ${sky.neonPrimary}44, inset 0 0 12px ${sky.neonPrimary}1f`
+                  : "0 2px 8px rgba(0, 0, 0, 0.12)",
                 cursor: "pointer",
                 transition:
                   "background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease",

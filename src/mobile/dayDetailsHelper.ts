@@ -17,7 +17,8 @@ export function computeActiveDayDetails(
   const isToday = activeDayForecast.dateStr === dayjs().format("YYYY-MM-DD");
 
   const dayPeriods = periods.filter(
-    (p) => dayjs(p.startTime).format("YYYY-MM-DD") === activeDayForecast.dateStr,
+    (p) =>
+      dayjs(p.startTime).format("YYYY-MM-DD") === activeDayForecast.dateStr,
   );
 
   const repPeriod =
@@ -124,18 +125,25 @@ export function computeActiveDayDetails(
 
   // ── 雨具與外出活動邏輯（與 Page 1 嚴格一致：只要天氣文字含「雨」或機率達標即判定帶傘） ──
   const isRainingCondition =
-    (repPeriod?.weather && (repPeriod.weather.includes("雨") || repPeriod.weather.includes("陣雨"))) ||
-    (activeDayForecast.weather && (activeDayForecast.weather.includes("雨") || activeDayForecast.weather.includes("陣雨"))) ||
+    (repPeriod?.weather &&
+      (repPeriod.weather.includes("雨") ||
+        repPeriod.weather.includes("陣雨"))) ||
+    (activeDayForecast.weather &&
+      (activeDayForecast.weather.includes("雨") ||
+        activeDayForecast.weather.includes("陣雨"))) ||
     popVal >= 40;
 
   const needUmbrella = isRainingCondition || popVal >= 10;
 
   const rainTipValue = isRainingCondition
-    ? (repPeriod?.weather?.includes("陣雨") || activeDayForecast.weather?.includes("陣雨") ? "🌧 陣雨必備雨具" : "🌧 務必攜傘")
+    ? repPeriod?.weather?.includes("陣雨") ||
+      activeDayForecast.weather?.includes("陣雨")
+      ? "🌧 陣雨必備雨具"
+      : "🌧 務必攜傘"
     : popVal >= 40
       ? "🌧 務必攜傘"
       : popVal >= 10
-        ? "☂️ 建議備傘（可備折疊傘）"
+        ? "☂️ 建議備傘"
         : "☀️ 無需攜傘";
 
   const tips = [
@@ -148,7 +156,8 @@ export function computeActiveDayDetails(
     {
       key: "activity",
       label: "戶外活動",
-      value: !needUmbrella && popVal < 20 ? "🏃 適合外出" : "🏠 留意天氣／室內為宜",
+      value:
+        !needUmbrella && popVal < 20 ? "🏃 適合外出" : "🏠 留意天氣",
       color: skyTextPrimary,
     },
   ];
@@ -170,14 +179,13 @@ export function computeActiveDayDetails(
       iconBg: "rgba(56,189,248,0.22)",
       label: "降雨機率",
       value: `${popVal}%`,
-      sub:
-        isRainingCondition
-          ? "有雨 · 建議攜帶雨具"
-          : popVal >= 40
-            ? "外出務必帶傘"
-            : popVal >= 10
-              ? "建議備折疊傘"
-              : "降雨機率低",
+      sub: isRainingCondition
+        ? "有雨 · 建議攜帶雨具"
+        : popVal >= 40
+          ? "外出務必帶傘"
+          : popVal >= 10
+            ? "建議備折疊傘"
+            : "降雨機率低",
     },
     {
       key: "wind",

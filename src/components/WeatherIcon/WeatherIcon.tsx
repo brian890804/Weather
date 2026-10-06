@@ -8,6 +8,7 @@ interface WeatherIconProps {
   weather: string;
   startTime?: string;
   size?: number;
+  priority?: boolean;
 }
 
 const urlCache = new Map<string, string>();
@@ -26,6 +27,7 @@ function WeatherIconBase({
   weather,
   startTime,
   size = 64,
+  priority = false,
 }: WeatherIconProps) {
   const night = useMemo(() => isCurrentNight(startTime), [startTime]);
   const iconName = useMemo(() => getWeatherIconName(weatherCode, weather, night), [weatherCode, weather, night]);
@@ -37,14 +39,18 @@ function WeatherIconBase({
         component="img"
         src={src}
         alt={weather}
-        loading="lazy"
-        decoding="async"
+        loading={priority ? 'eager' : 'lazy'}
+        decoding={priority ? 'sync' : 'async'}
+        fetchPriority={priority ? 'high' : 'auto'}
         sx={{
           width: size,
           height: size,
+          minWidth: size,
+          minHeight: size,
           objectFit: 'contain',
           filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))',
           pointerEvents: 'none',
+          display: 'block',
         }}
         onError={(e) => {
           (e.target as HTMLImageElement).src = getCachedIconUrl('partly-cloudy-day');

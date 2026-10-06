@@ -120,6 +120,11 @@ export default function MobilePage1({
             <Box
               sx={{
                 position: "relative",
+                width: 150,
+                height: 150,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 filter: `drop-shadow(0 0 20px ${sky.neonPrimary}73) drop-shadow(0 8px 18px rgba(0,0,0,0.38))`,
                 transition: "transform 0.3s ease",
                 "&:active": { transform: "scale(1.05)" },
@@ -130,6 +135,7 @@ export default function MobilePage1({
                 weather={period.weather}
                 startTime={period.startTime}
                 size={150}
+                priority
               />
             </Box>
           </Box>

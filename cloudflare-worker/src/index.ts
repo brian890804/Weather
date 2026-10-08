@@ -65,14 +65,14 @@ async function sendWorkerPush(
     const pushRequest = await buildPushPayload(
       {
         data: JSON.stringify(payloadData),
-        options: { ttl: 86400, urgency: 'low' },
+        options: { ttl: 86400, urgency: 'normal' },
       },
       subscription,
       vapid
     );
-    // 確保設定 RFC 8030 Urgency: low Header (低優先級、背景靜音)
+    // 使用 normal 確保 Apple APNs / Google 即時秒級送達，靜音由 silent: true 控制
     try {
-      pushRequest.headers.set('Urgency', 'low');
+      pushRequest.headers.set('Urgency', 'normal');
     } catch {
       /* ignore */
     }

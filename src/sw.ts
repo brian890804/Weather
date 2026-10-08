@@ -41,6 +41,7 @@ self.addEventListener('push', (event: PushEvent) => {
     icon: data.icon || '/icon-192.png',
     badge: data.badge || '/icon-192.png',
     tag: data.tag || `weather-${Date.now()}`,
+    silent: true,
     data: data.data || { url: '/' },
   };
 

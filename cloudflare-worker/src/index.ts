@@ -65,11 +65,17 @@ async function sendWorkerPush(
     const pushRequest = await buildPushPayload(
       {
         data: JSON.stringify(payloadData),
-        options: { ttl: 86400, urgency: 'normal' },
+        options: { ttl: 86400, urgency: 'low' },
       },
       subscription,
       vapid
     );
+    // 確保設定 RFC 8030 Urgency: low Header (低優先級、背景靜音)
+    try {
+      pushRequest.headers.set('Urgency', 'low');
+    } catch {
+      /* ignore */
+    }
 
     const res = await fetch(subscription.endpoint, pushRequest);
     if (!res.ok) {
@@ -151,6 +157,7 @@ export default {
           tag: `test-push-${Date.now()}`,
           icon: '/icon-192.png',
           badge: '/icon-192.png',
+          silent: true,
         };
 
         const result = await sendWorkerPush(subscription, payload, env);
@@ -244,6 +251,7 @@ export default {
             tag: `weather-daily-${currentSlotKey}`,
             icon: '/icon-192.png',
             badge: '/icon-192.png',
+            silent: true,
           };
 
           const pushRes = await sendWorkerPush(record.subscription, payload, env);

@@ -1,0 +1,18 @@
+name = "weather-push-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# 每一分鐘自動喚醒一次 Worker，檢查是否有符合設定時間的使用者需要推播
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+VAPID_PUBLIC_KEY = "BGtzxYkBhfX8S3w-i-GEIpcn8iH5eg4hVJmylEGEnJUCwpSoHkKa-pibyDgnyyCM9jDl0gT_r71k1OqFWxfZs3k"
+VAPID_PRIVATE_KEY = "OCjDw3elbSS2kJGKSh230u5FkbykHoXdYKV-LGgc-Go"
+VAPID_SUBJECT = "mailto:weather-app@example.com"
+
+# KV 命名空間綁定（儲存使用者的推播金鑰與自訂時間）
+[[kv_namespaces]]
+binding = "WEATHER_SUBS"
+id = "bfd44437dcf1401495152abdd80bb3bb"

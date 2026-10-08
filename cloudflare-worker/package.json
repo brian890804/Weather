@@ -1,0 +1,19 @@
+{
+  "name": "weather-push-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for Weather PWA Web Push with Cron Trigger",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240923.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.148.0"
+  }
+}

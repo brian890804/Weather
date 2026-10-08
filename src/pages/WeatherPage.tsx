@@ -53,10 +53,6 @@ import {
   getMinutesSinceFetched,
   MANUAL_REFRESH_MIN_INTERVAL_MINUTES,
 } from '../utils/cache';
-import {
-  buildMorningNotificationContent,
-  checkAndTriggerMorningNotification,
-} from '../utils/notificationService';
 
 dayjs.locale('zh-tw');
 
@@ -208,45 +204,13 @@ export default function WeatherPage() {
     return target ?? autoCurrentPeriod;
   }, [selectedPeriodTime, periods, autoCurrentPeriod]);
 
-  // 當前系統時間狀態（每 30 秒自動偵測一次，確保時間跨過 3hr 區間時能及時觸發切換與 06:30 晨間推播檢查）
+  // 當前系統時間狀態（每 30 秒自動偵測一次，確保時間跨過 3hr 區間時能及時觸發切換）
   useEffect(() => {
-    const activeTownshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : '';
-
-    const triggerCheck = () => {
-      checkAndTriggerMorningNotification(() =>
-        buildMorningNotificationContent(
-          selectedCity,
-          currentTownshipData?.townshipName || '',
-          displayPeriod,
-          realtimeTemps[activeTownshipKey],
-          realtimeWeather[activeTownshipKey]?.humidity,
-          realtimeWinds[activeTownshipKey]?.windSpeed,
-          realtimeWeather[activeTownshipKey]?.rainNow
-        )
-      );
-    };
-
     const timer = setInterval(() => {
       setCurrentTime(dayjs());
-      triggerCheck();
-    }, 10000);
-
-    const handleWakeOrFocus = () => {
-      setCurrentTime(dayjs());
-      triggerCheck();
-    };
-
-    document.addEventListener('visibilitychange', handleWakeOrFocus);
-    window.addEventListener('focus', handleWakeOrFocus);
-
-    triggerCheck();
-
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', handleWakeOrFocus);
-      window.removeEventListener('focus', handleWakeOrFocus);
-    };
-  }, [selectedCity, selectedTownship, currentTownshipData, displayPeriod, realtimeTemps, realtimeWeather, realtimeWinds]);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 使用者手動切換時段：若點擊了「當前時段 (現)」，重置為 null 恢復自動模式；若點擊其他時段，鎖定使用者選擇
   const handleSelectPeriod = useCallback((startTime: string) => {

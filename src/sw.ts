@@ -38,32 +38,17 @@ self.addEventListener('push', (event: PushEvent) => {
   const title = data.title || '天氣預報 · 晨間氣象快報';
   const options: NotificationOptions = {
     body: data.body || '今日天氣提醒',
-    icon: data.icon || './icon-192.png',
-    badge: data.badge || './icon-192.png',
-    tag: data.tag || 'weather-morning-alert',
-    silent: true, // 嚴格靜音 (不發出提示音，不震動)
-    data: data.data || { url: './' },
+    icon: data.icon || '/icon-192.png',
+    badge: data.badge || '/icon-192.png',
+    tag: data.tag || `weather-${Date.now()}`,
+    data: data.data || { url: '/' },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-// 監聽前端 postMessage 請求顯示靜音通知 (例如排程到期或立即測試)
-self.addEventListener('message', (event: ExtendableMessageEvent) => {
-  if (event.data && event.data.type === 'SHOW_WEATHER_NOTIFICATION') {
-    const payload = event.data.payload || {};
-    const title = payload.title || '天氣預報 · 晨間氣象快報';
-    const options: NotificationOptions = {
-      body: payload.body || '今日天氣提醒',
-      icon: payload.icon || './icon-192.png',
-      badge: payload.badge || './icon-192.png',
-      tag: payload.tag || 'weather-morning-alert',
-      silent: true, // 嚴格靜音
-      data: payload.data || { url: './' },
-    };
-
-    event.waitUntil(self.registration.showNotification(title, options));
-  }
+  event.waitUntil(
+    self.registration.showNotification(title, options).catch((err) => {
+      console.error('[SW] showNotification error:', err);
+    })
+  );
 });
 
 // 點擊通知開啟或聚焦應用程式

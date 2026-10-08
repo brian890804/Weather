@@ -19,8 +19,18 @@ import {
   getNotificationTime,
   setNotificationTime,
   DEFAULT_NOTIFICATION_TIME,
+  getWorkerUrl,
+  setWorkerUrl,
+  syncSubscriptionToWorker,
+  triggerWorkerTestPush,
 } from '../../utils/notificationService';
 import type { WeatherPeriod } from '../../types/weather';
+import CloudQueueIcon from '@mui/icons-material/CloudQueue';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
 
 interface NotificationSettingCardProps {
   cityName: string;
@@ -56,6 +66,23 @@ export default function NotificationSettingCard({
   });
   const [scheduledTime, setScheduledTime] = useState(() => getNotificationTime());
   const [testing, setTesting] = useState(false);
+  const [workerUrl, setWorkerUrlState] = useState(() => getWorkerUrl());
+  const [workerModalOpen, setWorkerModalOpen] = useState(false);
+  const [workerInput, setWorkerInput] = useState(() => getWorkerUrl());
+
+  const handleSaveWorkerUrl = () => {
+    setWorkerUrl(workerInput);
+    setWorkerUrlState(workerInput.trim().replace(/\/+$/, ''));
+    setWorkerModalOpen(false);
+    if (workerInput.trim()) {
+      onShowMessage?.('已儲存 Cloudflare Worker 網址！正在嘗試同步推播排程…');
+      syncSubscriptionToWorker({ cityName, townshipName, scheduledTime }).then((res) => {
+        onShowMessage?.(res.message);
+      });
+    } else {
+      onShowMessage?.('已清除 Cloudflare Worker 網址');
+    }
+  };
 
   const handleTimeChange = async (newTime: string) => {
     if (!newTime) return;
@@ -79,14 +106,23 @@ export default function NotificationSettingCard({
         setNotificationSubscribed(true);
         setSubscribed(true);
         onShowMessage?.(`推播時間已設定為 ${newTime}，並已成功啟用每日推播！`);
-        return;
       } else {
         onShowMessage?.(`推播時間已設定為 ${newTime}（請記得允許瀏覽器通知權限並開啟開關）`);
         return;
       }
     }
 
-    onShowMessage?.(`每日推播時間已更新為 ${newTime}`);
+    if (workerUrl) {
+      syncSubscriptionToWorker({ cityName, townshipName, scheduledTime: newTime }).then((res) => {
+        if (res.ok) {
+          onShowMessage?.(`每日 ${newTime} 已同步至 Cloudflare Worker 雲端排程！`);
+        } else {
+          onShowMessage?.(`排程同步失敗: ${res.message}`);
+        }
+      });
+    } else {
+      onShowMessage?.(`每日推播時間已更新為 ${newTime}`);
+    }
   };
 
   const handleToggle = async (checked: boolean) => {
@@ -106,6 +142,12 @@ export default function NotificationSettingCard({
         setNotificationSubscribed(true);
         setSubscribed(true);
         onShowMessage?.(`已開啟每日 ${scheduledTime} 晨間天氣靜音推播！`);
+
+        if (workerUrl) {
+          syncSubscriptionToWorker({ cityName, townshipName, scheduledTime }).then((res) => {
+            if (res.ok) onShowMessage?.(res.message);
+          });
+        }
       } else {
         setNotificationSubscribed(false);
         setSubscribed(false);
@@ -137,26 +179,35 @@ export default function NotificationSettingCard({
 
     setTesting(true);
     try {
-      const content = buildMorningNotificationContent(
-        cityName,
-        townshipName,
-        currentPeriod,
-        realtimeTemp,
-        realtimeHumidity,
-        realtimeWindSpeed,
-        realtimeRainNow
-      );
-
-      const ok = await sendSilentNotification({
-        title: content.title,
-        body: content.body,
-        tag: `test-silent-${Date.now()}`,
-      });
-
-      if (ok) {
-        onShowMessage?.('已發送靜音測試推播！請查看系統通知欄（無鈴聲、無震動）');
+      if (workerUrl) {
+        const res = await triggerWorkerTestPush();
+        if (res.ok) {
+          onShowMessage?.('已由 Cloudflare Worker 發出真實雲端靜音推播！即便網頁關閉也能收到。');
+        } else {
+          onShowMessage?.(res.message);
+        }
       } else {
-        onShowMessage?.('發送失敗，請確認 Service Worker 是否已啟用');
+        const content = buildMorningNotificationContent(
+          cityName,
+          townshipName,
+          currentPeriod,
+          realtimeTemp,
+          realtimeHumidity,
+          realtimeWindSpeed,
+          realtimeRainNow
+        );
+
+        const ok = await sendSilentNotification({
+          title: content.title,
+          body: content.body,
+          tag: `test-silent-${Date.now()}`,
+        });
+
+        if (ok) {
+          onShowMessage?.('已發送本機靜音測試推播！(若要關閉網頁也能收到，請點擊「設定雲端」綁定 Cloudflare Worker)');
+        } else {
+          onShowMessage?.('測試推播觸發失敗，請確認是否已授權通知權限');
+        }
       }
     } catch (err) {
       console.warn('Test notification error:', err);
@@ -188,7 +239,7 @@ export default function NotificationSettingCard({
 
   return (
     <Box sx={containerSx}>
-      {/* 頂部：標題與開關 */}
+      {/* 頂部：標題、雲端狀態與開關 */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', touchAction: 'pan-y' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <NotificationsActiveIcon sx={{ color: '#00F0FF', fontSize: 19 }} />
@@ -196,20 +247,50 @@ export default function NotificationSettingCard({
             晨間天氣靜音推播
           </Typography>
         </Box>
-        <Switch
-          checked={subscribed}
-          onChange={(e) => handleToggle(e.target.checked)}
-          color="primary"
-          size="small"
-          sx={{
-            '& .MuiSwitch-switchBase.Mui-checked': {
-              color: '#00F0FF',
-            },
-            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-              backgroundColor: '#00F0FF',
-            },
-          }}
-        />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* Cloudflare Worker 設定狀態膠囊 */}
+          <Box
+            onClick={() => {
+              setWorkerInput(workerUrl);
+              setWorkerModalOpen(true);
+            }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              px: 0.9,
+              py: 0.25,
+              borderRadius: '12px',
+              bgcolor: workerUrl ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+              border: `1px solid ${workerUrl ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 255, 255, 0.15)'}`,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              WebkitTapHighlightColor: 'transparent',
+              '&:active': { transform: 'scale(0.95)' },
+            }}
+          >
+            <CloudQueueIcon sx={{ fontSize: 13, color: workerUrl ? '#00F0FF' : '#94A3B8' }} />
+            <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: workerUrl ? '#00F0FF' : '#94A3B8' }}>
+              {workerUrl ? '雲端已連線' : '設定雲端'}
+            </Typography>
+          </Box>
+
+          <Switch
+            checked={subscribed}
+            onChange={(e) => handleToggle(e.target.checked)}
+            color="primary"
+            size="small"
+            sx={{
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: '#00F0FF',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: '#00F0FF',
+              },
+            }}
+          />
+        </Box>
       </Box>
 
       {/* 權限被封鎖提示 (僅在 denied 時顯示精簡警示) */}
@@ -247,24 +328,41 @@ export default function NotificationSettingCard({
         }}
       >
         {/* 左側：時鐘與時間輸入框 */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
           <AccessTimeIcon sx={{ color: '#00F0FF', fontSize: 16 }} />
           <input
             type="time"
             value={scheduledTime}
             onChange={(e) => handleTimeChange(e.target.value)}
+            onBlur={(e) => handleTimeChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleTimeChange((e.target as HTMLInputElement).value);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            onClick={(e) => {
+              try {
+                (e.currentTarget as any).showPicker?.();
+              } catch {
+                /* ignore */
+              }
+            }}
             style={{
-              background: 'rgba(15, 23, 42, 0.85)',
-              border: '1px solid rgba(0, 240, 255, 0.35)',
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: '1px solid rgba(0, 240, 255, 0.45)',
               color: '#00F0FF',
-              borderRadius: '5px',
-              padding: '2px 6px',
-              fontSize: '13px',
+              borderRadius: '6px',
+              padding: '4px 8px',
+              fontSize: '13.5px',
               fontWeight: '700',
               fontFamily: 'inherit',
               outline: 'none',
               cursor: 'pointer',
-              touchAction: 'pan-y',
+              colorScheme: 'dark',
+              WebkitUserSelect: 'auto',
+              userSelect: 'auto',
+              display: 'inline-block',
             }}
           />
           {scheduledTime !== DEFAULT_NOTIFICATION_TIME && (
@@ -319,6 +417,70 @@ export default function NotificationSettingCard({
           嚴格靜音 · 涵蓋氣溫、室內外體感、降雨機率與穿衣帶傘
         </Typography>
       </Box>
+
+      {/* Cloudflare Worker 設定彈跳視窗 */}
+      <Dialog
+        open={workerModalOpen}
+        onClose={() => setWorkerModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: 'rgba(15, 23, 42, 0.95)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(0, 240, 255, 0.3)',
+              borderRadius: '16px',
+              color: '#FFF',
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontSize: 16, pb: 1, color: '#00F0FF' }}>
+          ⛅ Cloudflare Worker 雲端推播設定
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '10px !important' }}>
+          <Typography sx={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 }}>
+            若需要<strong>「關閉網頁、鎖定螢幕後依然準時推播」</strong>，請部署 Cloudflare Worker 並在此填入 Worker 網址：
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="https://weather-push-worker.xxx.workers.dev"
+            value={workerInput}
+            onChange={(e) => setWorkerInput(e.target.value)}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                color: '#00F0FF',
+                bgcolor: 'rgba(0,0,0,0.3)',
+                '& fieldset': { borderColor: 'rgba(0, 240, 255, 0.3)' },
+                '&:hover fieldset': { borderColor: '#00F0FF' },
+              },
+            }}
+          />
+          <Typography sx={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
+            💡 Worker 原始碼與 3 分鐘部署指南位於專案目錄 <code>cloudflare-worker/README.md</code>，完全免費、免綁信用卡！
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setWorkerModalOpen(false)} sx={{ color: '#94A3B8', fontSize: 12.5 }}>
+            取消
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveWorkerUrl}
+            sx={{
+              bgcolor: '#00F0FF',
+              color: '#000',
+              fontWeight: 800,
+              fontSize: 12.5,
+              '&:hover': { bgcolor: '#00D0DF' },
+            }}
+          >
+            儲存並同步
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

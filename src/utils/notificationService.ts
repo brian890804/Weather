@@ -211,50 +211,140 @@ export async function sendSilentNotification(payload: {
   return false;
 }
 
+export const VAPID_PUBLIC_KEY =
+  'BGtzxYkBhfX8S3w-i-GEIpcn8iH5eg4hVJmylEGEnJUCwpSoHkKa-pibyDgnyyCM9jDl0gT_r71k1OqFWxfZs3k';
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+const STORAGE_KEY_WORKER_URL = 'weather_push_worker_url';
+
+export function getWorkerUrl(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY_WORKER_URL) || 'https://weather-push-worker.weather-push-worker.workers.dev';
+  } catch {
+    return 'https://weather-push-worker.weather-push-worker.workers.dev';
+  }
+}
+
+export function setWorkerUrl(url: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_WORKER_URL, url.trim().replace(/\/+$/, ''));
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * 前端檢查並執行自訂時間定時推播 (若分頁開著或由背景喚醒時檢測)
+ * 向瀏覽器 PushManager 取得或註冊 Web Push 憑證 (PushSubscription)
  */
-export async function checkAndTriggerMorningNotification(
-  getContent: () => WeatherNotificationContent
-): Promise<void> {
-  if (!isNotificationSubscribed()) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+export async function getOrRegisterPushSubscription(): Promise<PushSubscription | null> {
+  if (!isNotificationSupported()) return null;
+  const perm = await requestNotificationPermission();
+  if (perm !== 'granted') return null;
 
-  const now = dayjs();
-  const todayStr = now.format('YYYY-MM-DD');
-  const scheduledTime = getNotificationTime();
-  const currentSlotKey = `${todayStr}_${scheduledTime}`;
-  const lastNotified = localStorage.getItem(STORAGE_KEY_LAST_NOTIFIED);
+  try {
+    let reg: ServiceWorkerRegistration | undefined = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      reg = await navigator.serviceWorker.register('/sw.js');
+    }
+    await navigator.serviceWorker.ready;
 
-  // 檢查此特定時段 (例如 2026-10-08_10:42) 今天是否已經發送過
-  if (lastNotified === currentSlotKey) return;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const convertedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey as unknown as ArrayBuffer,
+      });
+    }
+    return sub;
+  } catch (err) {
+    console.warn('[NotificationService] getOrRegisterPushSubscription error:', err);
+    return null;
+  }
+}
 
-  // 解析自訂推播時間 (HH:mm)
-  const [targetHourStr, targetMinuteStr] = scheduledTime.split(':');
-  const targetHour = parseInt(targetHourStr, 10);
-  const targetMinute = parseInt(targetMinuteStr, 10);
+/**
+ * 將使用者訂閱設定同步給 Cloudflare Worker (定時推播核心)
+ */
+export async function syncSubscriptionToWorker(params: {
+  cityName: string;
+  townshipName: string;
+  scheduledTime: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const workerUrl = getWorkerUrl();
+  if (!workerUrl) {
+    return { ok: false, message: '尚未填寫 Cloudflare Worker 網址' };
+  }
 
-  const currentHour = now.hour();
-  const currentMinute = now.minute();
+  try {
+    const sub = await getOrRegisterPushSubscription();
+    if (!sub) {
+      return { ok: false, message: '無法取得瀏覽器 PushSubscription，請確認已允許通知權限' };
+    }
 
-  // 判斷時間是否在設定時間之後 (且在設定時間起算的 4 小時有效時間窗口內觸發)
-  const currentTotalMins = currentHour * 60 + currentMinute;
-  const targetTotalMins = targetHour * 60 + targetMinute;
-
-  const isTimeReached = currentTotalMins >= targetTotalMins && currentTotalMins <= targetTotalMins + 240;
-
-  if (isTimeReached) {
-    console.log(`[NotificationService] Scheduled time reached (${scheduledTime})! Triggering silent notification...`);
-    const content = getContent();
-    const success = await sendSilentNotification({
-      title: content.title,
-      body: content.body,
-      tag: `weather-scheduled-${currentSlotKey}`,
+    const res = await fetch(`${workerUrl}/api/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: sub.toJSON(),
+        time: params.scheduledTime,
+        cityName: params.cityName,
+        townshipName: params.townshipName,
+      }),
     });
 
-    if (success) {
-      localStorage.setItem(STORAGE_KEY_LAST_NOTIFIED, currentSlotKey);
-      console.log(`[NotificationService] Successfully recorded last notified slot: ${currentSlotKey}`);
+    if (!res.ok) {
+      const err = await res.text();
+      return { ok: false, message: `伺服器回應錯誤: ${err}` };
     }
+
+    return { ok: true, message: `已成功將每日 ${params.scheduledTime} 靜音推播同步至雲端伺服器！` };
+  } catch (err: any) {
+    console.warn('[NotificationService] syncSubscriptionToWorker error:', err);
+    return { ok: false, message: `連線失敗: ${err?.message || err}` };
+  }
+}
+
+/**
+ * 透過 Cloudflare Worker 發送立即測試推播 (真實 Apple/Google 系統級 Web Push)
+ */
+export async function triggerWorkerTestPush(): Promise<{ ok: boolean; message: string }> {
+  const workerUrl = getWorkerUrl();
+  if (!workerUrl) {
+    return { ok: false, message: '尚未設定 Cloudflare Worker 網址' };
+  }
+
+  try {
+    const sub = await getOrRegisterPushSubscription();
+    if (!sub) {
+      return { ok: false, message: '未取得 PushSubscription' };
+    }
+
+    const res = await fetch(`${workerUrl}/api/test-push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: sub.toJSON(),
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return { ok: false, message: `伺服器發送失敗: ${err}` };
+    }
+
+    return { ok: true, message: '已透過 Cloudflare Worker 成功發送真實雲端 Web Push！' };
+  } catch (err: any) {
+    return { ok: false, message: `連線錯誤: ${err?.message || err}` };
   }
 }

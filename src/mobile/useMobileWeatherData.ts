@@ -74,18 +74,18 @@ export function useMobileWeatherData({
       return futureDays.map((day) => {
         const preFix = day.dateStr === tmr ? "明天 " : "";
         const lbl = `${preFix}${dayjs(day.dateStr).format("M/D (dd)")}`;
-        // 若週預報 (F-D0047-091) 的 maxPop 為 0，但 3 天逐時預報 (F-D0047-049) 中該日有提供 3 小時降雨機率，則進行融合
+        // 融合降雨機率：若 3 天逐時預報 (F-D0047-049) 中該日有提供 3 小時降雨機率，取全日最大機率進行嚴格對齊統一
         let fusedPop = day.maxPop;
-        if (fusedPop === 0 && periods.length > 0) {
+        if (periods.length > 0) {
           const matchedDayPeriods = periods.filter(
             (p) => dayjs(p.startTime).format("YYYY-MM-DD") === day.dateStr,
           );
           if (matchedDayPeriods.length > 0) {
             const pops = matchedDayPeriods
               .map((p) => parseInt(p.probabilityOfPrecipitation))
-              .filter((v) => !isNaN(v) && v > 0);
+              .filter((v) => !isNaN(v));
             if (pops.length > 0) {
-              fusedPop = Math.max(...pops);
+              fusedPop = Math.max(fusedPop, ...pops);
             }
           }
         }

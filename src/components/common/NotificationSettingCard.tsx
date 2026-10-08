@@ -65,7 +65,9 @@ export default function NotificationSettingCard({
     return isNotificationSubscribed() && Notification.permission === 'granted';
   });
   const [scheduledTime, setScheduledTime] = useState(() => getNotificationTime());
+  const [tempTime, setTempTime] = useState(() => getNotificationTime());
   const [testing, setTesting] = useState(false);
+  const [syncingTime, setSyncingTime] = useState(false);
   const [workerUrl, setWorkerUrlState] = useState(() => getWorkerUrl());
   const [workerModalOpen, setWorkerModalOpen] = useState(false);
   const [workerInput, setWorkerInput] = useState(() => getWorkerUrl());
@@ -84,8 +86,10 @@ export default function NotificationSettingCard({
     }
   };
 
-  const handleTimeChange = async (newTime: string) => {
+  const handleConfirmTime = async (targetTime?: string) => {
+    const newTime = targetTime || tempTime;
     if (!newTime) return;
+    setTempTime(newTime);
     setScheduledTime(newTime);
     setNotificationTime(newTime);
 
@@ -113,13 +117,18 @@ export default function NotificationSettingCard({
     }
 
     if (workerUrl) {
-      syncSubscriptionToWorker({ cityName, townshipName, scheduledTime: newTime }).then((res) => {
-        if (res.ok) {
-          onShowMessage?.(`每日 ${newTime} 已同步至 Cloudflare Worker 雲端排程！`);
-        } else {
-          onShowMessage?.(`排程同步失敗: ${res.message}`);
-        }
-      });
+      setSyncingTime(true);
+      syncSubscriptionToWorker({ cityName, townshipName, scheduledTime: newTime })
+        .then((res) => {
+          if (res.ok) {
+            onShowMessage?.(`每日 ${newTime} 已成功同步至雲端伺服器！`);
+          } else {
+            onShowMessage?.(`排程同步失敗: ${res.message}`);
+          }
+        })
+        .finally(() => {
+          setSyncingTime(false);
+        });
     } else {
       onShowMessage?.(`每日推播時間已更新為 ${newTime}`);
     }
@@ -328,16 +337,15 @@ export default function NotificationSettingCard({
         }}
       >
         {/* 左側：時鐘與時間輸入框 */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
           <AccessTimeIcon sx={{ color: '#00F0FF', fontSize: 16 }} />
           <input
             type="time"
-            value={scheduledTime}
-            onChange={(e) => handleTimeChange(e.target.value)}
-            onBlur={(e) => handleTimeChange(e.target.value)}
+            value={tempTime}
+            onChange={(e) => setTempTime(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                handleTimeChange((e.target as HTMLInputElement).value);
+                handleConfirmTime((e.target as HTMLInputElement).value);
                 (e.target as HTMLInputElement).blur();
               }
             }}
@@ -350,7 +358,8 @@ export default function NotificationSettingCard({
             }}
             style={{
               background: 'rgba(15, 23, 42, 0.95)',
-              border: '1px solid rgba(0, 240, 255, 0.45)',
+              border: tempTime !== scheduledTime ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.45)',
+              boxShadow: tempTime !== scheduledTime ? '0 0 8px rgba(0, 240, 255, 0.4)' : 'none',
               color: '#00F0FF',
               borderRadius: '6px',
               padding: '4px 8px',
@@ -363,12 +372,39 @@ export default function NotificationSettingCard({
               WebkitUserSelect: 'auto',
               userSelect: 'auto',
               display: 'inline-block',
+              transition: 'all 0.2s ease',
             }}
           />
-          {scheduledTime !== DEFAULT_NOTIFICATION_TIME && (
+
+          {/* 若選擇的時間與已排程的時間不同，顯示高亮的 [確認設定] 按鈕 */}
+          {tempTime !== scheduledTime && (
             <Button
               size="small"
-              onClick={() => handleTimeChange(DEFAULT_NOTIFICATION_TIME)}
+              variant="contained"
+              onClick={() => handleConfirmTime(tempTime)}
+              disabled={syncingTime}
+              startIcon={syncingTime ? <CircularProgress size={10} color="inherit" /> : undefined}
+              sx={{
+                fontSize: 11,
+                fontWeight: 800,
+                bgcolor: '#00F0FF',
+                color: '#0a0f1e',
+                py: 0.2,
+                px: 1,
+                minWidth: 'auto',
+                boxShadow: '0 0 10px rgba(0, 240, 255, 0.5)',
+                '&:hover': { bgcolor: '#38BDF8' },
+                '&:active': { transform: 'scale(0.96)' },
+              }}
+            >
+              確認設定
+            </Button>
+          )}
+
+          {tempTime !== DEFAULT_NOTIFICATION_TIME && (
+            <Button
+              size="small"
+              onClick={() => handleConfirmTime(DEFAULT_NOTIFICATION_TIME)}
               sx={{
                 fontSize: 10.5,
                 color: '#94A3B8',

@@ -107,13 +107,16 @@ export default function MobileWeather({
   return (
     <Box
       sx={{
+        position: "fixed",
+        inset: 0,
         width: "100%",
-        height: "100dvh",
+        height: "100%",
+        minHeight: "-webkit-fill-available",
         background: sky.bg,
-        position: "relative",
         overflow: "hidden",
         fontFamily: '"Google Sans", "Noto Sans TC", system-ui, sans-serif',
         transition: "background 0.7s ease",
+        zIndex: 10,
       }}
     >
       {/* ── Cyberpunk 動態天氣背景光暈與環境光斑層 ── */}
@@ -199,7 +202,8 @@ export default function MobileWeather({
         <Box
           sx={{
             width: "100%",
-            height: "100dvh",
+            height: "100%",
+            minHeight: "100%",
             scrollSnapAlign: "start",
             scrollSnapStop: "normal",
             position: "relative",

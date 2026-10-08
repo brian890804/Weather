@@ -56,8 +56,8 @@ export default function MobilePage2({
           boxSizing: "border-box",
           px: { xs: 2, sm: 2.5 },
           pt: "max(12px, env(safe-area-inset-top, 12px))",
-          pb: "calc(env(safe-area-inset-bottom, 24px) + 72px)",
-          gap: "12px",
+          pb: "max(20px, env(safe-area-inset-bottom, 16px))",
+          gap: "10px",
           width: "100%",
         }}
       >

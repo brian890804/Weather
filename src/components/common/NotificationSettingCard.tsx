@@ -168,38 +168,39 @@ export default function NotificationSettingCard({
 
   const containerSx = isCyberpunkMobile
     ? {
-        p: { xs: '12px 14px', sm: '16px' },
-        borderRadius: '16px',
-        background: 'linear-gradient(135deg, rgba(20, 30, 48, 0.72) 0%, rgba(12, 18, 30, 0.88) 100%)',
-        border: '1px solid rgba(0, 240, 255, 0.25)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+        p: { xs: '10px 12px', sm: '12px 14px' },
+        borderRadius: '14px',
+        background: 'linear-gradient(135deg, rgba(20, 30, 48, 0.78) 0%, rgba(12, 18, 30, 0.9) 100%)',
+        border: '1px solid rgba(0, 240, 255, 0.22)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         touchAction: 'pan-y',
       }
     : {
-        p: { xs: 2, sm: 2.5 },
-        borderRadius: '16px',
+        p: { xs: 1.5, sm: 2 },
+        borderRadius: '14px',
         bgcolor: 'rgba(255, 255, 255, 0.035)',
         border: '1px solid rgba(255, 255, 255, 0.08)',
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
         touchAction: 'pan-y',
       };
 
   return (
     <Box sx={containerSx}>
-      {/* 標題與開關 */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, touchAction: 'pan-y' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <NotificationsActiveIcon sx={{ color: '#00F0FF', fontSize: 22 }} />
-          <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: '#FFF' }}>
-            每日晨間天氣推播
+      {/* 頂部：標題與開關 */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', touchAction: 'pan-y' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <NotificationsActiveIcon sx={{ color: '#00F0FF', fontSize: 19 }} />
+          <Typography sx={{ fontWeight: 800, fontSize: 14.5, color: '#FFF', letterSpacing: 0.2 }}>
+            晨間天氣靜音推播
           </Typography>
         </Box>
         <Switch
           checked={subscribed}
           onChange={(e) => handleToggle(e.target.checked)}
           color="primary"
+          size="small"
           sx={{
             '& .MuiSwitch-switchBase.Mui-checked': {
               color: '#00F0FF',
@@ -211,73 +212,54 @@ export default function NotificationSettingCard({
         />
       </Box>
 
-      {/* 權限狀態提示 */}
+      {/* 權限被封鎖提示 (僅在 denied 時顯示精簡警示) */}
       {permissionState === 'denied' && (
         <Box
           sx={{
-            mb: 1.5,
-            p: 1.25,
-            borderRadius: '8px',
+            mt: 0.75,
+            px: 1,
+            py: 0.5,
+            borderRadius: '6px',
             bgcolor: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
           }}
         >
-          <Typography sx={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, lineHeight: 1.4 }}>
-            ⚠️ 瀏覽器目前「封鎖」了通知權限。請在網址列左側點擊鎖頭或設定，將通知改為「允許」後重新整理頁面。
-          </Typography>
-        </Box>
-      )}
-      {permissionState === 'default' && (
-        <Box
-          sx={{
-            mb: 1.5,
-            p: 1.25,
-            borderRadius: '8px',
-            bgcolor: 'rgba(234, 179, 8, 0.12)',
-            border: '1px solid rgba(234, 179, 8, 0.35)',
-          }}
-        >
-          <Typography sx={{ fontSize: 12, color: '#FDE047', fontWeight: 600, lineHeight: 1.4 }}>
-            🔔 尚未授予系統通知權限。請開啟上方開關或點擊測試按鈕以授權通知。
+          <Typography sx={{ fontSize: 11, color: '#FCA5A5', fontWeight: 600, lineHeight: 1.3 }}>
+            ⚠️ 瀏覽器通知被封鎖，請於網址列設定改為「允許」
           </Typography>
         </Box>
       )}
 
-      {/* 推播時間自訂設定區 */}
+      {/* 中間功能列：時間設定 + 測試按鈕同一行 */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexWrap: 'wrap',
           gap: 1,
-          bgcolor: 'rgba(255, 255, 255, 0.05)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: '10px',
-          px: 1.5,
-          py: 1,
-          mb: 1.5,
+          bgcolor: 'rgba(255, 255, 255, 0.04)',
+          border: '1px solid rgba(255, 255, 255, 0.07)',
+          borderRadius: '8px',
+          px: 1,
+          py: 0.6,
+          mt: 0.85,
           touchAction: 'pan-y',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <AccessTimeIcon sx={{ color: '#00F0FF', fontSize: 19 }} />
-          <Typography sx={{ fontSize: 13.5, color: '#F1F5F9', fontWeight: 700 }}>
-            推播時間設定
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* 左側：時鐘與時間輸入框 */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+          <AccessTimeIcon sx={{ color: '#00F0FF', fontSize: 16 }} />
           <input
             type="time"
             value={scheduledTime}
             onChange={(e) => handleTimeChange(e.target.value)}
             style={{
               background: 'rgba(15, 23, 42, 0.85)',
-              border: '1px solid rgba(0, 240, 255, 0.4)',
+              border: '1px solid rgba(0, 240, 255, 0.35)',
               color: '#00F0FF',
-              borderRadius: '6px',
-              padding: '3px 8px',
-              fontSize: '14px',
+              borderRadius: '5px',
+              padding: '2px 6px',
+              fontSize: '13px',
               fontWeight: '700',
               fontFamily: 'inherit',
               outline: 'none',
@@ -290,70 +272,52 @@ export default function NotificationSettingCard({
               size="small"
               onClick={() => handleTimeChange(DEFAULT_NOTIFICATION_TIME)}
               sx={{
-                fontSize: 11.5,
+                fontSize: 10.5,
                 color: '#94A3B8',
-                py: 0.2,
-                px: 0.8,
+                py: 0,
+                px: 0.5,
                 minWidth: 'auto',
                 '&:hover': { color: '#00F0FF' },
               }}
             >
-              預設(06:30)
+              預設
             </Button>
           )}
         </Box>
-      </Box>
 
-      {/* 靜音重點提示 */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.75,
-          bgcolor: 'rgba(0, 240, 255, 0.08)',
-          border: '1px solid rgba(0, 240, 255, 0.2)',
-          borderRadius: '8px',
-          px: 1.25,
-          py: 0.75,
-          mb: 1.5,
-        }}
-      >
-        <VolumeOffIcon sx={{ color: '#00F0FF', fontSize: 18, flexShrink: 0 }} />
-        <Typography sx={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.85)', fontWeight: 600 }}>
-          嚴格靜音設定：推播完全不發出音效與震動，清晨不打擾作息
-        </Typography>
-      </Box>
-
-      {/* 推播內容說明 */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1.5, pl: 0.5 }}>
-        <Typography sx={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.65)', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <InfoOutlinedIcon sx={{ fontSize: 15, color: '#94A3B8' }} /> 涵蓋資訊：今日氣溫、室內/室外體感溫度、降雨機率、穿衣指南與帶傘建議
-        </Typography>
-      </Box>
-
-      {/* 測試按鈕 */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 0.5 }}>
+        {/* 右側：測試推播按鈕 */}
         <Button
           variant="outlined"
           size="small"
-          startIcon={testing ? <CircularProgress size={14} color="inherit" /> : <SendIcon sx={{ fontSize: 15 }} />}
+          startIcon={testing ? <CircularProgress size={11} color="inherit" /> : <SendIcon sx={{ fontSize: 12 }} />}
           onClick={handleTestNotification}
           disabled={testing}
           sx={{
-            borderColor: 'rgba(0, 240, 255, 0.4)',
+            borderColor: 'rgba(0, 240, 255, 0.3)',
             color: '#00F0FF',
-            fontSize: 12.5,
+            fontSize: 11,
             fontWeight: 700,
             textTransform: 'none',
-            borderRadius: '8px',
+            borderRadius: '6px',
+            py: 0.25,
+            px: 0.85,
+            minWidth: 'auto',
             '&:hover': {
               borderColor: '#00F0FF',
               bgcolor: 'rgba(0, 240, 255, 0.1)',
             },
           }}
         >
-          立即測試推播 (靜音預覽)
+          測試
         </Button>
+      </Box>
+
+      {/* 底部精簡說明 */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.7, px: 0.2 }}>
+        <VolumeOffIcon sx={{ color: '#00F0FF', fontSize: 13, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.65)', fontWeight: 500, lineHeight: 1.3 }}>
+          嚴格靜音 · 涵蓋氣溫、室內外體感、降雨機率與穿衣帶傘
+        </Typography>
       </Box>
     </Box>
   );

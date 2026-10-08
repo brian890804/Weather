@@ -328,8 +328,11 @@ export default function WeatherPage() {
     <Box
       sx={{
         minHeight: '100vh',
-        background:
-          'radial-gradient(ellipse at 20% 10%, rgba(30,60,114,0.7) 0%, transparent 60%), radial-gradient(ellipse at 80% 90%, rgba(42,82,152,0.4) 0%, transparent 60%), #0a0f1e',
+        height: isIOSView ? '100%' : 'auto',
+        overflow: isIOSView ? 'hidden' : 'visible',
+        background: isIOSView
+          ? 'transparent'
+          : 'radial-gradient(ellipse at 20% 10%, rgba(30,60,114,0.7) 0%, transparent 60%), radial-gradient(ellipse at 80% 90%, rgba(42,82,152,0.4) 0%, transparent 60%), #0a0f1e',
       }}
     >
       {/* ── 手機與 iOS 模式：全屏 3 頁上下滑動貼合 (Scroll Snap) 現代化氣象體驗 ── */}

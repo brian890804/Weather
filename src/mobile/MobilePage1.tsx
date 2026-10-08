@@ -159,24 +159,25 @@ export default function MobilePage1({
         position: "relative",
       }}
     >
-      {/* ── 下拉更新發光霓虹頂部提示區塊 ── */}
+      {/* ── 下拉更新發光霓虹頂部提示區塊 (完美填滿 iPhone 頂部安全區，無留黑縫隙) ── */}
       <Box
         sx={{
           position: "absolute",
           top: 0,
           left: 0,
           right: 0,
-          height: `${pullDistance}px`,
+          height: `calc(${pullDistance}px + env(safe-area-inset-top, 0px))`,
           zIndex: 99,
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-end",
           justifyContent: "center",
+          pb: "10px",
           gap: 1,
           overflow: "hidden",
           transition: isRefreshing ? "height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)" : "none",
-          background: `linear-gradient(180deg, ${sky.neonPrimary}26 0%, transparent 100%)`,
-          borderBottom: pullDistance > 20 ? `1px solid ${sky.neonPrimary}44` : "none",
-          boxShadow: pullDistance > 30 ? `0 4px 20px ${sky.neonPrimary}33` : "none",
+          background: `linear-gradient(180deg, ${sky.neonPrimary}38 0%, ${sky.neonPrimary}15 70%, transparent 100%)`,
+          borderBottom: pullDistance > 20 ? `1px solid ${sky.neonPrimary}55` : "none",
+          boxShadow: pullDistance > 30 ? `0 8px 24px ${sky.neonPrimary}44` : "none",
           pointerEvents: "none",
         }}
       >

@@ -49,7 +49,10 @@ export function computeActiveDayDetails(
     activeDayForecast.maxPop || 0,
     ...dayPeriods.map((p) => parseInt(p.probabilityOfPrecipitation) || 0),
   ];
-  const popVal = Math.max(...allDayPops);
+  let popVal = Math.max(...allDayPops);
+  if (popVal === 0 && (activeDayForecast.weather?.includes("雨") || activeDayForecast.description?.includes("雨"))) {
+    popVal = activeDayForecast.weather.includes("陣雨") || activeDayForecast.weather.includes("雷雨") ? 40 : 30;
+  }
 
   // 風向風速：統計當日最大級數與常見風向
   let maxBeaufort = 2;

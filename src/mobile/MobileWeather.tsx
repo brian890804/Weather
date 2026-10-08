@@ -152,7 +152,10 @@ export default function MobileWeather({
     <Box
       sx={{
         position: "fixed",
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         width: "100%",
         height: "100%",
         minHeight: "-webkit-fill-available",
@@ -163,7 +166,7 @@ export default function MobileWeather({
         zIndex: 10,
       }}
     >
-      {/* ── 現代優雅天氣動態微流光背景 (依天氣主題色平滑漫射飄移) ── */}
+      {/* ── 現代優雅天氣動態微流光背景 (依天氣主題色平滑漫射飄移，更清晰顯著) ── */}
       {/* 1. 全域深層漸層背景光暈 */}
       <Box
         sx={{
@@ -176,70 +179,76 @@ export default function MobileWeather({
         }}
       />
 
-      {/* 2. 主色調天頂柔光斑 (緩慢優雅漫遊 20s) */}
+      {/* 2. 主色調天頂柔光斑 (清晰醒目，流暢漫遊 16s) */}
       <Box
         sx={{
           position: "absolute",
-          top: "-12%",
-          right: "-12%",
-          width: { xs: 360, sm: 460 },
-          height: { xs: 360, sm: 460 },
+          top: "-10%",
+          right: "-10%",
+          width: { xs: 380, sm: 500 },
+          height: { xs: 380, sm: 500 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonPrimary}48 0%, ${sky.neonSecondary}1c 45%, transparent 72%)`,
-          filter: "blur(80px)",
+          background: `radial-gradient(circle, ${sky.neonPrimary}66 0%, ${sky.neonSecondary}33 45%, transparent 72%)`,
+          filter: "blur(65px)",
+          transform: "translate3d(0, 0, 0)",
+          willChange: "transform, opacity",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "ambientAurora1 20s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          animation: "ambientAurora1 16s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
           "@keyframes ambientAurora1": {
-            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.75 },
-            "33%": { transform: "translate3d(-35px, 25px, 0) scale(1.08)", opacity: 0.9 },
-            "66%": { transform: "translate3d(20px, 40px, 0) scale(0.96)", opacity: 0.8 },
-            "100%": { transform: "translate3d(-15px, 15px, 0) scale(1.02)", opacity: 0.85 },
+            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.85 },
+            "33%": { transform: "translate3d(-45px, 35px, 0) scale(1.15)", opacity: 1 },
+            "66%": { transform: "translate3d(25px, 50px, 0) scale(0.95)", opacity: 0.9 },
+            "100%": { transform: "translate3d(-20px, 20px, 0) scale(1.08)", opacity: 0.95 },
           },
         }}
       />
 
-      {/* 3. 次色調左下方逆向柔光斑 (深層緩慢飄動 24s) */}
+      {/* 3. 次色調左下方逆向柔光斑 (深層流動 20s) */}
       <Box
         sx={{
           position: "absolute",
-          bottom: "3%",
-          left: "-18%",
-          width: { xs: 340, sm: 440 },
-          height: { xs: 340, sm: 440 },
+          bottom: "2%",
+          left: "-15%",
+          width: { xs: 360, sm: 480 },
+          height: { xs: 360, sm: 480 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonSecondary}3d 0%, ${sky.neonPrimary}15 50%, transparent 70%)`,
-          filter: "blur(85px)",
+          background: `radial-gradient(circle, ${sky.neonSecondary}59 0%, ${sky.neonPrimary}29 50%, transparent 70%)`,
+          filter: "blur(70px)",
+          transform: "translate3d(0, 0, 0)",
+          willChange: "transform, opacity",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "ambientAurora2 24s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          animation: "ambientAurora2 20s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
           "@keyframes ambientAurora2": {
-            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.7 },
-            "33%": { transform: "translate3d(30px, -25px, 0) scale(1.06)", opacity: 0.85 },
-            "66%": { transform: "translate3d(-20px, -35px, 0) scale(0.95)", opacity: 0.65 },
-            "100%": { transform: "translate3d(15px, -15px, 0) scale(1.03)", opacity: 0.75 },
+            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.8 },
+            "33%": { transform: "translate3d(40px, -35px, 0) scale(1.12)", opacity: 1 },
+            "66%": { transform: "translate3d(-30px, -45px, 0) scale(0.94)", opacity: 0.75 },
+            "100%": { transform: "translate3d(20px, -20px, 0) scale(1.06)", opacity: 0.9 },
           },
         }}
       />
 
-      {/* 4. 中景核心微光擴散 (中央呼吸微動 28s) */}
+      {/* 4. 中景核心微光擴散 (中央呼吸動態 22s) */}
       <Box
         sx={{
           position: "absolute",
-          top: "36%",
-          right: "-15%",
-          width: { xs: 300, sm: 380 },
-          height: { xs: 300, sm: 380 },
+          top: "34%",
+          right: "-12%",
+          width: { xs: 320, sm: 420 },
+          height: { xs: 320, sm: 420 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonPrimary}25 0%, transparent 68%)`,
-          filter: "blur(90px)",
+          background: `radial-gradient(circle, ${sky.neonPrimary}44 0%, transparent 68%)`,
+          filter: "blur(75px)",
+          transform: "translate3d(0, 0, 0)",
+          willChange: "transform, opacity",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "ambientAurora3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          animation: "ambientAurora3 22s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
           "@keyframes ambientAurora3": {
-            "0%": { transform: "translate3d(0, 0, 0) scale(0.95)", opacity: 0.5 },
-            "50%": { transform: "translate3d(-30px, -20px, 0) scale(1.1)", opacity: 0.75 },
-            "100%": { transform: "translate3d(15px, 20px, 0) scale(1)", opacity: 0.55 },
+            "0%": { transform: "translate3d(0, 0, 0) scale(0.95)", opacity: 0.65 },
+            "50%": { transform: "translate3d(-40px, -30px, 0) scale(1.18)", opacity: 0.9 },
+            "100%": { transform: "translate3d(25px, 25px, 0) scale(1.02)", opacity: 0.7 },
           },
         }}
       />

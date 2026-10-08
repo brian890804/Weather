@@ -153,7 +153,10 @@ export function parseWeeklyForecastResponse(api: any): Record<string, WeeklyFore
         const match = desc.match(/降雨機率\s*(\d+)%/);
         if (match) {
           pop = parseInt(match[1]);
-        } else if (isNaN(pop)) {
+        } else if (wx.includes('雨') || desc.includes('雨')) {
+          // 氣象署第 5~7 天常無逐時機率但預報有雨，依雨勢類型智慧保底合理的降雨機率
+          pop = wx.includes('陣雨') || wx.includes('雷雨') ? 40 : 30;
+        } else {
           pop = 0;
         }
       }

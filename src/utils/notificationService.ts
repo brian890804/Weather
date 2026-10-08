@@ -256,17 +256,20 @@ export async function getOrRegisterPushSubscription(): Promise<{ sub: PushSubscr
   }
 
   try {
-    let reg: ServiceWorkerRegistration | undefined = await navigator.serviceWorker.getRegistration();
+    let reg = await navigator.serviceWorker.getRegistration();
     if (!reg) {
       const swUrl = import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/+$/, '')}/sw.js` : './sw.js';
-      reg = await navigator.serviceWorker.register(swUrl);
+      await navigator.serviceWorker.register(swUrl);
     }
-    await navigator.serviceWorker.ready;
+    const readyReg = await navigator.serviceWorker.ready;
+    if (!readyReg?.pushManager) {
+      return { sub: null, error: '瀏覽器 PushManager 模組尚未就緒，請重新開啟 App' };
+    }
 
-    let sub = await reg.pushManager.getSubscription();
+    let sub = await readyReg.pushManager.getSubscription();
     if (!sub) {
       const convertedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-      sub = await reg.pushManager.subscribe({
+      sub = await readyReg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: convertedKey as unknown as BufferSource,
       });
@@ -274,7 +277,11 @@ export async function getOrRegisterPushSubscription(): Promise<{ sub: PushSubscr
     return { sub };
   } catch (err: any) {
     console.warn('[NotificationService] getOrRegisterPushSubscription error:', err);
-    return { sub: null, error: err?.message || String(err) };
+    let msg = err?.message || String(err);
+    if (msg.includes('user activation') || msg.includes('NotAllowedError')) {
+      msg = 'iOS 限制必須手動點擊「確認時間」按鈕授權。若頻繁切換被鎖定，請將桌面 App 向上滑掉完全關閉後重開。';
+    }
+    return { sub: null, error: msg };
   }
 }
 

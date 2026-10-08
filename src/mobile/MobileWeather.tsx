@@ -86,26 +86,20 @@ export default function MobileWeather({
     const container = scrollContainerRef.current;
     if (!container) return;
     const pageHeight = container.clientHeight;
-    if (idx === 1 && page2Ref.current) {
-      page2Ref.current.scrollTop = 0;
-    }
     container.scrollTo({
       top: idx * pageHeight,
       behavior: "smooth",
     });
   }, []);
 
-  // 監聽外層滾動，更新目前 activePage 狀態，並在滑到第 2 頁時確保從頂部開始看
+  // 監聽外層滾動，更新目前 activePage 狀態（超過 40% 高度即識別為進入 Page 2）
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const pageHeight = container.clientHeight;
     if (pageHeight <= 0) return;
-    const currentIdx = Math.round(container.scrollTop / pageHeight);
-    if (currentIdx !== activePage && (currentIdx === 0 || currentIdx === 1)) {
-      if (currentIdx === 1 && activePage === 0 && page2Ref.current) {
-        page2Ref.current.scrollTop = 0;
-      }
+    const currentIdx = container.scrollTop >= pageHeight * 0.4 ? 1 : 0;
+    if (currentIdx !== activePage) {
       setActivePage(currentIdx);
     }
   }, [activePage]);
@@ -182,7 +176,7 @@ export default function MobileWeather({
       {/* 動態天氣環境光效 (雨天雨絲流動、大太陽斜向光束微光、雲霧流動) */}
       <WeatherAmbientEffects weatherType={sky.weatherType} />
 
-      {/* ── APP 主內容區：原生垂直滾動貼合容器 (CSS Scroll Snap: y mandatory) ── */}
+      {/* ── APP 主內容區：原生垂直滾動容器 ── */}
       <Box
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -195,8 +189,7 @@ export default function MobileWeather({
           zIndex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          scrollSnapType: "y mandatory",
-          scrollBehavior: "smooth",
+          scrollSnapType: activePage === 0 ? "y mandatory" : "none",
           WebkitOverflowScrolling: "touch",
           overscrollBehaviorY: "contain",
           "&::-webkit-scrollbar": { display: "none" },
@@ -208,7 +201,7 @@ export default function MobileWeather({
             width: "100%",
             height: "100dvh",
             scrollSnapAlign: "start",
-            scrollSnapStop: "always",
+            scrollSnapStop: "normal",
             position: "relative",
             flexShrink: 0,
           }}
@@ -236,11 +229,13 @@ export default function MobileWeather({
 
         {/* PAGE 2：全方位氣象趨勢與生活指南 (Scroll Snap 項目 2) */}
         <Box
+          ref={page2Ref}
           sx={{
             width: "100%",
-            height: "100dvh",
+            minHeight: "100dvh",
+            height: "auto",
             scrollSnapAlign: "start",
-            scrollSnapStop: "always",
+            scrollSnapStop: "normal",
             position: "relative",
             flexShrink: 0,
           }}

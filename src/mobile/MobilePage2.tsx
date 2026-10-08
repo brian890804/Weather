@@ -38,49 +38,27 @@ export default function MobilePage2({
   onShowMessage,
 }: MobilePage2Props) {
   const page2BentoCards = activeDayDetails?.bentoCards || [];
-  const touchStartY = React.useRef<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const diffY = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartY.current = null;
-    // 當 Page 2 已經在最頂端 (scrollTop <= 5)，且使用者向下拉動超過 45px 時，順暢滾動回 Page 1
-    if (diffY > 45 && pageRef?.current && pageRef.current.scrollTop <= 5) {
-      onGoToPage1();
-    }
-  };
 
   return (
     <Box
       ref={pageRef}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
       sx={{
         width: "100%",
-        height: "100%",
-        overflowY: "auto",
-        overscrollBehaviorY: "auto",
-        WebkitOverflowScrolling: "touch",
-        "&::-webkit-scrollbar": { display: "none" },
         position: "relative",
+        boxSizing: "border-box",
       }}
     >
-      {/* 內部彈性排版容器：徹底解決行動端 Flex 滾動高度截斷問題 */}
+      {/* 內部排版容器：無嵌套捲動，完美配合 Safari 滿版順暢滾動 */}
       <Box
         sx={{
           display: "flex",
           flexDirection: "column",
           boxSizing: "border-box",
           px: { xs: 2, sm: 2.5 },
-          pt: "max(8px, env(safe-area-inset-top))",
-          pb: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+          pt: "max(12px, env(safe-area-inset-top, 12px))",
+          pb: "calc(env(safe-area-inset-bottom, 24px) + 72px)",
           gap: "12px",
           width: "100%",
-          minHeight: "100%",
         }}
       >
         {/* 頂部標題列 */}

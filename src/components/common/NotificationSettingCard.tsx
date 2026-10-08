@@ -143,6 +143,8 @@ export default function NotificationSettingCard({
         border: '1px solid rgba(0, 240, 255, 0.25)',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
         backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        touchAction: 'pan-y',
       }
     : {
         p: { xs: 2, sm: 2.5 },
@@ -150,12 +152,13 @@ export default function NotificationSettingCard({
         bgcolor: 'rgba(255, 255, 255, 0.035)',
         border: '1px solid rgba(255, 255, 255, 0.08)',
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+        touchAction: 'pan-y',
       };
 
   return (
     <Box sx={containerSx}>
       {/* 標題與開關 */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, touchAction: 'pan-y' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <NotificationsActiveIcon sx={{ color: '#00F0FF', fontSize: 22 }} />
           <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: '#FFF' }}>
@@ -191,6 +194,7 @@ export default function NotificationSettingCard({
           px: 1.5,
           py: 1,
           mb: 1.5,
+          touchAction: 'pan-y',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -215,6 +219,7 @@ export default function NotificationSettingCard({
               fontFamily: 'inherit',
               outline: 'none',
               cursor: 'pointer',
+              touchAction: 'pan-y',
             }}
           />
           {scheduledTime !== DEFAULT_NOTIFICATION_TIME && (

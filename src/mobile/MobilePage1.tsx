@@ -86,61 +86,8 @@ export default function MobilePage1({
       ? `${period.weather}有雨`
       : period?.weather;
 
-  // ── 下拉更新 (Pull to Refresh) 狀態與阻尼計算 ──
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const touchStartY = useRef<number | null>(null);
-  const isPulling = useRef(false);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!active || isRefreshing) return;
-    touchStartY.current = e.touches[0].clientY;
-    isPulling.current = false;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartY.current === null || !active || isRefreshing) return;
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartY.current;
-
-    // 只有向下拉動且超過 10px 時觸發下拉更新
-    if (diff > 10) {
-      isPulling.current = true;
-      // 橡皮筋阻尼效果：最大拉動距離 85px
-      const damping = Math.min(85, Math.pow(diff, 0.85) * 1.5);
-      setPullDistance(damping);
-    } else {
-      setPullDistance(0);
-    }
-  };
-
-  const handleTouchEnd = async () => {
-    if (!active) return;
-    touchStartY.current = null;
-    if (pullDistance >= 55 && !isRefreshing && onRefresh) {
-      setIsRefreshing(true);
-      setPullDistance(50); // 定格在 50px 呈現旋轉載入
-      try {
-        await onRefresh();
-      } catch (err) {
-        console.warn("Pull refresh failed", err);
-      } finally {
-        setTimeout(() => {
-          setIsRefreshing(false);
-          setPullDistance(0);
-        }, 500);
-      }
-    } else {
-      setPullDistance(0);
-    }
-    isPulling.current = false;
-  };
-
   return (
     <Box
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       sx={{
         width: "100%",
         height: "100%",
@@ -159,74 +106,6 @@ export default function MobilePage1({
         position: "relative",
       }}
     >
-      {/* ── 下拉更新發光霓虹頂部提示區塊 (完美填滿 iPhone 頂部安全區，無留黑縫隙) ── */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: `calc(${pullDistance}px + env(safe-area-inset-top, 0px))`,
-          zIndex: 99,
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "center",
-          pb: "10px",
-          gap: 1,
-          overflow: "hidden",
-          transition: isRefreshing ? "height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)" : "none",
-          background: `linear-gradient(180deg, ${sky.neonPrimary}38 0%, ${sky.neonPrimary}15 70%, transparent 100%)`,
-          borderBottom: pullDistance > 20 ? `1px solid ${sky.neonPrimary}55` : "none",
-          boxShadow: pullDistance > 30 ? `0 8px 24px ${sky.neonPrimary}44` : "none",
-          pointerEvents: "none",
-        }}
-      >
-        {pullDistance > 15 && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 2,
-              py: 0.5,
-              borderRadius: "20px",
-              bgcolor: "rgba(10, 20, 35, 0.75)",
-              border: `1px solid ${sky.neonPrimary}66`,
-              boxShadow: `0 0 15px ${sky.neonPrimary}4d`,
-              transform: `scale(${Math.min(1, pullDistance / 50)})`,
-              transition: "transform 0.2s ease",
-            }}
-          >
-            {isRefreshing ? (
-              <CircularProgress size={16} sx={{ color: sky.neonPrimary }} thickness={5} />
-            ) : (
-              <SyncIcon
-                sx={{
-                  color: sky.neonPrimary,
-                  fontSize: 18,
-                  transform: `rotate(${(pullDistance / 60) * 360}deg)`,
-                  transition: "transform 0.1s linear",
-                }}
-              />
-            )}
-            <Typography
-              sx={{
-                fontSize: 12.5,
-                fontWeight: 700,
-                color: sky.textPrimary,
-                letterSpacing: 0.5,
-                textShadow: `0 0 8px ${sky.neonPrimary}80`,
-              }}
-            >
-              {isRefreshing
-                ? "正在更新全台預報與測站數據…"
-                : pullDistance >= 55
-                ? "放開以立即更新"
-                : "下拉更新氣象數據"}
-            </Typography>
-          </Box>
-        )}
-      </Box>
       {/* 核心天氣看板 (依用戶指定順序：圖示 -> 氣象 -> 溫度 -> 最高最低 -> 地點) */}
       {period && (
         <Box

@@ -167,6 +167,7 @@ export default function MobileWeather({
       }}
     >
       {/* ── 現代優雅天氣動態微流光背景 (依天氣主題色平滑漫射飄移，更清晰顯著) ── */}
+      {/* ── 現代優雅天氣動態流光背景 (色彩鮮明清晰、深度流暢漫遊) ── */}
       {/* 1. 全域深層漸層背景光暈 */}
       <Box
         sx={{
@@ -179,76 +180,100 @@ export default function MobileWeather({
         }}
       />
 
-      {/* 2. 主色調天頂柔光斑 (清晰醒目，流暢漫遊 16s) */}
+      {/* 2. 主色調右上強光天頂柔斑 (鮮明生動 14s) */}
       <Box
         sx={{
           position: "absolute",
-          top: "-10%",
-          right: "-10%",
-          width: { xs: 380, sm: 500 },
-          height: { xs: 380, sm: 500 },
+          top: "-8%",
+          right: "-8%",
+          width: { xs: 420, sm: 540 },
+          height: { xs: 420, sm: 540 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonPrimary}66 0%, ${sky.neonSecondary}33 45%, transparent 72%)`,
-          filter: "blur(65px)",
+          background: `radial-gradient(circle, ${sky.neonPrimary}aa 0%, ${sky.neonSecondary}66 38%, transparent 70%)`,
+          filter: "blur(48px)",
           transform: "translate3d(0, 0, 0)",
           willChange: "transform, opacity",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "ambientAurora1 16s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          animation: "ambientAurora1 14s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
           "@keyframes ambientAurora1": {
-            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.85 },
-            "33%": { transform: "translate3d(-45px, 35px, 0) scale(1.15)", opacity: 1 },
-            "66%": { transform: "translate3d(25px, 50px, 0) scale(0.95)", opacity: 0.9 },
-            "100%": { transform: "translate3d(-20px, 20px, 0) scale(1.08)", opacity: 0.95 },
+            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.95 },
+            "33%": { transform: "translate3d(-60px, 45px, 0) scale(1.22)", opacity: 1 },
+            "66%": { transform: "translate3d(35px, 65px, 0) scale(0.92)", opacity: 0.88 },
+            "100%": { transform: "translate3d(-30px, 30px, 0) scale(1.15)", opacity: 1 },
           },
         }}
       />
 
-      {/* 3. 次色調左下方逆向柔光斑 (深層流動 20s) */}
+      {/* 3. 次色調左下方強光逆向柔斑 (鮮明深層流動 16s) */}
       <Box
         sx={{
           position: "absolute",
-          bottom: "2%",
-          left: "-15%",
-          width: { xs: 360, sm: 480 },
-          height: { xs: 360, sm: 480 },
+          bottom: "4%",
+          left: "-12%",
+          width: { xs: 390, sm: 500 },
+          height: { xs: 390, sm: 500 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonSecondary}59 0%, ${sky.neonPrimary}29 50%, transparent 70%)`,
-          filter: "blur(70px)",
+          background: `radial-gradient(circle, ${sky.neonSecondary}99 0%, ${sky.neonPrimary}55 42%, transparent 70%)`,
+          filter: "blur(50px)",
           transform: "translate3d(0, 0, 0)",
           willChange: "transform, opacity",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "ambientAurora2 20s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          animation: "ambientAurora2 16s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
           "@keyframes ambientAurora2": {
-            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.8 },
-            "33%": { transform: "translate3d(40px, -35px, 0) scale(1.12)", opacity: 1 },
-            "66%": { transform: "translate3d(-30px, -45px, 0) scale(0.94)", opacity: 0.75 },
-            "100%": { transform: "translate3d(20px, -20px, 0) scale(1.06)", opacity: 0.9 },
+            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.9 },
+            "33%": { transform: "translate3d(55px, -45px, 0) scale(1.2)", opacity: 1 },
+            "66%": { transform: "translate3d(-40px, -60px, 0) scale(0.9)", opacity: 0.82 },
+            "100%": { transform: "translate3d(30px, -25px, 0) scale(1.12)", opacity: 0.96 },
           },
         }}
       />
 
-      {/* 4. 中景核心微光擴散 (中央呼吸動態 22s) */}
+      {/* 4. 中景核心動態微光環波 (中央呼吸波動 18s) */}
       <Box
         sx={{
           position: "absolute",
-          top: "34%",
-          right: "-12%",
-          width: { xs: 320, sm: 420 },
-          height: { xs: 320, sm: 420 },
+          top: "32%",
+          right: "-10%",
+          width: { xs: 360, sm: 460 },
+          height: { xs: 360, sm: 460 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonPrimary}44 0%, transparent 68%)`,
-          filter: "blur(75px)",
+          background: `radial-gradient(circle, ${sky.neonPrimary}77 0%, ${sky.neonSecondary}33 45%, transparent 68%)`,
+          filter: "blur(55px)",
           transform: "translate3d(0, 0, 0)",
           willChange: "transform, opacity",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "ambientAurora3 22s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          animation: "ambientAurora3 18s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
           "@keyframes ambientAurora3": {
-            "0%": { transform: "translate3d(0, 0, 0) scale(0.95)", opacity: 0.65 },
-            "50%": { transform: "translate3d(-40px, -30px, 0) scale(1.18)", opacity: 0.9 },
-            "100%": { transform: "translate3d(25px, 25px, 0) scale(1.02)", opacity: 0.7 },
+            "0%": { transform: "translate3d(0, 0, 0) scale(0.92)", opacity: 0.8 },
+            "50%": { transform: "translate3d(-55px, -40px, 0) scale(1.28)", opacity: 1 },
+            "100%": { transform: "translate3d(35px, 35px, 0) scale(1.05)", opacity: 0.85 },
+          },
+        }}
+      />
+
+      {/* 5. 漸層波光微動光暈帶 (由左至右波狀流動 20s) */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: "15%",
+          left: "-20%",
+          width: "140%",
+          height: "40%",
+          borderRadius: "50%",
+          background: `radial-gradient(ellipse at 50% 50%, ${sky.neonPrimary}44 0%, transparent 65%)`,
+          filter: "blur(60px)",
+          transform: "translate3d(0, 0, 0)",
+          willChange: "transform, opacity",
+          pointerEvents: "none",
+          zIndex: 0,
+          animation: "ambientWave 20s ease-in-out infinite alternate",
+          "@keyframes ambientWave": {
+            "0%": { transform: "translate3d(0, 0, 0) rotate(-6deg)", opacity: 0.7 },
+            "50%": { transform: "translate3d(40px, 25px, 0) rotate(4deg)", opacity: 0.95 },
+            "100%": { transform: "translate3d(-30px, 15px, 0) rotate(-3deg)", opacity: 0.75 },
           },
         }}
       />

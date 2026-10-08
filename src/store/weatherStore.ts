@@ -5,6 +5,7 @@ export type TabCategory = 'overview' | 'temperature' | 'wind' | 'rain' | 'comfor
 
 const CITY_KEY = 'weather_selected_city';
 const TOWNSHIP_KEY = 'weather_selected_township';
+const AUTO_LOCATION_KEY = 'weather_is_auto_location';
 
 function loadSavedCity(): string {
   try {
@@ -38,7 +39,29 @@ function saveTownship(name: string) {
   }
 }
 
+function loadSavedAutoLocation(): boolean {
+  try {
+    const val = localStorage.getItem(AUTO_LOCATION_KEY);
+    // 預設為 true（若使用者初次造訪則啟用自動定位），使用者若明確關閉/手動選取則為 false
+    return val === null ? true : val === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function saveAutoLocation(auto: boolean) {
+  try {
+    localStorage.setItem(AUTO_LOCATION_KEY, String(auto));
+  } catch {
+    /* ignore */
+  }
+}
+
 interface WeatherState {
+  // 自動定位模式
+  isAutoLocation: boolean;
+  setIsAutoLocation: (auto: boolean) => void;
+
   // 所有縣市資料
   cities: ParsedCityData[];
   setCities: (data: ParsedCityData[]) => void;
@@ -54,7 +77,7 @@ interface WeatherState {
   // 選中的鄉鎮區 (小 Tab)
   selectedTownship: string;
   setSelectedTownship: (townshipName: string) => void;
-  setSelectedCityAndTownship: (cityName: string, townshipName: string) => void;
+  setSelectedCityAndTownship: (cityName: string, townshipName: string, isAuto?: boolean) => void;
 
   // 選中的時段 (null = 自動當前時段)
   selectedPeriodTime: string | null;
@@ -151,12 +174,19 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     });
   },
 
+  isAutoLocation: loadSavedAutoLocation(),
+  setIsAutoLocation: (auto: boolean) => {
+    saveAutoLocation(auto);
+    set({ isAutoLocation: auto });
+  },
+
   weeklyForecasts: {},
   setWeeklyForecasts: (forecasts) => set({ weeklyForecasts: forecasts }),
 
   selectedCity: loadSavedCity(),
   setSelectedCity: (cityName: string) => {
     saveCity(cityName);
+    saveAutoLocation(false);
     // 切換縣市時，自動挑選該縣市第 1 個鄉鎮或記憶中的鄉鎮
     const city = get().cities.find((c) => c.cityName === cityName);
     let newTownship = '';
@@ -170,25 +200,30 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       selectedCity: cityName,
       selectedTownship: newTownship,
       selectedPeriodTime: null,
+      isAutoLocation: false,
     });
   },
 
   selectedTownship: loadSavedTownship(),
   setSelectedTownship: (townshipName: string) => {
     saveTownship(townshipName);
+    saveAutoLocation(false);
     set({
       selectedTownship: townshipName,
       selectedPeriodTime: null,
+      isAutoLocation: false,
     });
   },
 
-  setSelectedCityAndTownship: (cityName: string, townshipName: string) => {
+  setSelectedCityAndTownship: (cityName: string, townshipName: string, isAuto = false) => {
     saveCity(cityName);
     saveTownship(townshipName);
+    saveAutoLocation(isAuto);
     set({
       selectedCity: cityName,
       selectedTownship: townshipName,
       selectedPeriodTime: null,
+      isAutoLocation: isAuto,
     });
   },
 

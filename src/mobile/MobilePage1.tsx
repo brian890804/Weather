@@ -4,6 +4,7 @@ import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
+import NearMeIcon from "@mui/icons-material/NearMe";
 import SyncIcon from "@mui/icons-material/Sync";
 import dayjs from "dayjs";
 import type { WeatherPeriod } from "../types/weather";
@@ -17,6 +18,7 @@ interface MobilePage1Props {
   active: boolean;
   selectedCity: string;
   selectedTownship: string;
+  isAutoLocation?: boolean;
   onOpenLocation: () => void;
   period: WeatherPeriod | null;
   dayHighLow: { max: string; min: string };
@@ -36,6 +38,7 @@ export default function MobilePage1({
   active,
   selectedCity,
   selectedTownship,
+  isAutoLocation,
   onOpenLocation,
   period,
   dayHighLow,
@@ -366,13 +369,16 @@ export default function MobilePage1({
               sx={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 0.5,
+                gap: 0.75,
                 px: "10px",
                 py: "3px",
+                borderRadius: "8px",
                 cursor: "pointer",
                 userSelect: "none",
                 WebkitTapHighlightColor: "transparent",
                 transition: "all 0.2s ease",
+                bgcolor: isAutoLocation ? `${sky.neonPrimary}15` : "transparent",
+                border: isAutoLocation ? `1px solid ${sky.neonPrimary}40` : "1px solid transparent",
                 "&:active": {
                   opacity: 0.65,
                   bgcolor: `${sky.neonPrimary}25`,
@@ -380,6 +386,15 @@ export default function MobilePage1({
                 },
               }}
             >
+              {isAutoLocation ? (
+                <NearMeIcon
+                  sx={{
+                    color: sky.neonPrimary,
+                    fontSize: 18,
+                    filter: `drop-shadow(0 0 6px ${sky.neonPrimary})`,
+                  }}
+                />
+              ) : null}
               <Typography
                 sx={{
                   fontSize: 18,
@@ -391,7 +406,9 @@ export default function MobilePage1({
               >
                 {selectedCity} · {selectedTownship}
               </Typography>
-              <LocationOnIcon sx={{ color: "#fff", fontSize: 22 }} />
+              {!isAutoLocation ? (
+                <LocationOnIcon sx={{ color: "#fff", fontSize: 22 }} />
+              ) : null}
             </Box>
           </Box>
 

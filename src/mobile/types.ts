@@ -9,7 +9,7 @@ export interface MobileWeatherProps {
   cities: ParsedCityData[];
   selectedCity: string;
   selectedTownship: string;
-  setSelectedCityAndTownship: (city: string, township: string) => void;
+  setSelectedCityAndTownship: (city: string, township: string, isAuto?: boolean) => void;
   townships: ParsedTownshipData[];
   periods: WeatherPeriod[];
   displayPeriod: WeatherPeriod | null;
@@ -18,6 +18,8 @@ export interface MobileWeatherProps {
   onSelectPeriod: (startTime: string) => void;
   lastFetchedAt: string | null;
   onRefresh?: () => Promise<void>;
+  isAutoLocation?: boolean;
+  onLocateCurrentPosition?: () => Promise<void>;
 }
 
 export interface DayForecast {

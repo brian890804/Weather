@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
@@ -40,9 +40,12 @@ import Snackbar from '@mui/material/Snackbar';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
 import EditLocationAltIcon from '@mui/icons-material/EditLocationAlt';
+import MyLocationIcon from '@mui/icons-material/MyLocation';
+import NearMeIcon from '@mui/icons-material/NearMe';
 import { R } from '../App';
 import MobileWeather from '../mobile/MobileWeather';
 import IOSLocationModal from '../components/ios/IOSLocationModal';
+import { getCurrentPosition, findNearestTownship } from '../utils/geolocation';
 import {
   readCache,
   isRateLimited,
@@ -69,6 +72,7 @@ export default function WeatherPage() {
     selectedTownship,
     setSelectedTownship,
     setSelectedCityAndTownship,
+    isAutoLocation,
     activeTab,
     setActiveTab,
     lastFetchedAt,
@@ -77,6 +81,7 @@ export default function WeatherPage() {
   } = useWeatherStore();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const [desktopLocationModalOpen, setDesktopLocationModalOpen] = useState(false);
@@ -89,6 +94,53 @@ export default function WeatherPage() {
     }
   });
   const [snackbarMsg, setSnackbarMsg] = useState<string | null>(null);
+
+  // 定位功能：取得瀏覽器經緯度並配對全台最近行政區
+  const handleLocateCurrentPosition = useCallback(async () => {
+    if (locating) return;
+    if (!cities || cities.length === 0) {
+      setSnackbarMsg('正在等待氣象資料載入完成…');
+      return;
+    }
+    setLocating(true);
+    try {
+      const pos = await getCurrentPosition();
+      const nearest = findNearestTownship(pos.latitude, pos.longitude, cities);
+      if (nearest) {
+        setSelectedCityAndTownship(nearest.cityName, nearest.townshipName, true);
+        setSnackbarMsg(`已自動定位至：${nearest.cityName} ${nearest.townshipName}（距離約 ${nearest.distanceKm.toFixed(1)} km）`);
+      } else {
+        throw new Error('未能在氣象預報資料中比對到最近的行政區');
+      }
+    } catch (err: any) {
+      console.warn('定位失敗:', err);
+      const msg = err?.message || '定位失敗，請確認已授權定位權限';
+      setSnackbarMsg(msg);
+      throw err;
+    } finally {
+      setLocating(false);
+    }
+  }, [cities, locating, setSelectedCityAndTownship]);
+
+  // 初次載入自動定位：若使用者保持「自動定位」模式，當 cities 資料載入完成後自動嘗試一次靜默定位
+  const hasAutoLocatedRef = useRef(false);
+  useEffect(() => {
+    if (!hasAutoLocatedRef.current && isAutoLocation && cities.length > 0) {
+      hasAutoLocatedRef.current = true;
+      // 進行非阻塞背景定位
+      getCurrentPosition()
+        .then((pos) => {
+          const nearest = findNearestTownship(pos.latitude, pos.longitude, cities);
+          if (nearest) {
+            setSelectedCityAndTownship(nearest.cityName, nearest.townshipName, true);
+            setSnackbarMsg(`已自動偵測您的所在地：${nearest.cityName} ${nearest.townshipName}`);
+          }
+        })
+        .catch(() => {
+          // 若初次靜默定位被拒或超時，不噴惱人錯誤，保留上次儲存或預設城市
+        });
+    }
+  }, [cities, isAutoLocation, setSelectedCityAndTownship]);
 
   // 倒數計時冷卻保護
   useEffect(() => {
@@ -255,6 +307,8 @@ export default function WeatherPage() {
             onSelectPeriod={handleSelectPeriod}
             lastFetchedAt={lastFetchedAt}
             onRefresh={handleRefresh}
+            isAutoLocation={isAutoLocation}
+            onLocateCurrentPosition={handleLocateCurrentPosition}
           />
         ) : error ? (
           <Box
@@ -603,14 +657,46 @@ export default function WeatherPage() {
             {/* 3. 目前位置與時段標題（放大） */}
             {currentTownshipData && displayPeriod && (
               <Box sx={{ mb: 2.5 }}>
-                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                  <LocationOnIcon sx={{ color: '#60A5FA', fontSize: { xs: 28, sm: 34 } }} />
+                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                  {isAutoLocation ? (
+                    <NearMeIcon sx={{ color: '#60A5FA', fontSize: { xs: 26, sm: 32 } }} />
+                  ) : (
+                    <LocationOnIcon sx={{ color: '#60A5FA', fontSize: { xs: 28, sm: 34 } }} />
+                  )}
                   <Typography
                     variant={isMobile ? 'h5' : 'h4'}
                     sx={{ fontWeight: 900, color: '#F1F5F9', letterSpacing: 0.5, fontSize: { xs: 22, sm: 30 } }}
                   >
                     {selectedCity} {currentTownshipData.townshipName}
                   </Typography>
+                  <Button
+                    size="small"
+                    onClick={() => handleLocateCurrentPosition().catch(() => {})}
+                    disabled={locating}
+                    startIcon={
+                      locating ? (
+                        <CircularProgress size={14} sx={{ color: '#60A5FA' }} />
+                      ) : (
+                        <MyLocationIcon sx={{ fontSize: 16 }} />
+                      )
+                    }
+                    sx={{
+                      ml: 1,
+                      color: isAutoLocation ? '#93C5FD' : '#CBD5E1',
+                      bgcolor: isAutoLocation ? 'rgba(96,165,250,0.18)' : 'rgba(255,255,255,0.06)',
+                      border: isAutoLocation ? '1px solid rgba(96,165,250,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      px: 1.25,
+                      py: 0.4,
+                      '&:hover': {
+                        bgcolor: 'rgba(96,165,250,0.25)',
+                      },
+                    }}
+                  >
+                    {locating ? '定位中…' : isAutoLocation ? '已自動定位' : '自動讀取所在地'}
+                  </Button>
                 </Stack>
                 <Typography
                   variant="body1"
@@ -754,6 +840,8 @@ export default function WeatherPage() {
     selectedTownship={selectedTownship}
     onSelectCityAndTownship={setSelectedCityAndTownship}
     citiesData={cities}
+    isAutoLocation={isAutoLocation}
+    onLocateCurrentPosition={handleLocateCurrentPosition}
   />
 
       {/* ── API Key 設定彈跳視窗 ── */}

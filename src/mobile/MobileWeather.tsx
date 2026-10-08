@@ -29,6 +29,8 @@ export default function MobileWeather({
   onSelectPeriod,
   lastFetchedAt,
   onRefresh,
+  isAutoLocation,
+  onLocateCurrentPosition,
 }: MobileWeatherProps) {
   const [activePage, setActivePage] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -214,6 +216,7 @@ export default function MobileWeather({
             active={activePage === 0}
             selectedCity={selectedCity}
             selectedTownship={selectedTownship}
+            isAutoLocation={isAutoLocation}
             onOpenLocation={() => setLocationOpen(true)}
             period={period}
             dayHighLow={dayHighLow}
@@ -263,6 +266,8 @@ export default function MobileWeather({
         onSelectCityAndTownship={setSelectedCityAndTownship}
         citiesData={cities}
         neonColor={sky.neonPrimary}
+        isAutoLocation={isAutoLocation}
+        onLocateCurrentPosition={onLocateCurrentPosition}
       />
     </Box>
   );

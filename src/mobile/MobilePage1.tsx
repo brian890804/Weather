@@ -86,8 +86,56 @@ export default function MobilePage1({
       ? `${period.weather}有雨`
       : period?.weather;
 
+  // ── 下拉更新 (Pull to Refresh) 智慧阻尼與極簡浮動指示器 ──
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!active || isRefreshing) return;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current === null || !active || isRefreshing) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+
+    if (diff > 8) {
+      // 橡皮筋阻尼：下拉手感細緻緊湊
+      const damping = Math.min(65, Math.pow(diff, 0.8) * 1.3);
+      setPullDistance(damping);
+    } else {
+      setPullDistance(0);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!active) return;
+    touchStartY.current = null;
+    if (pullDistance >= 45 && !isRefreshing && onRefresh) {
+      setIsRefreshing(true);
+      setPullDistance(42);
+      try {
+        await onRefresh();
+      } catch (err) {
+        console.warn("Pull refresh failed", err);
+      } finally {
+        setTimeout(() => {
+          setIsRefreshing(false);
+          setPullDistance(0);
+        }, 400);
+      }
+    } else {
+      setPullDistance(0);
+    }
+  };
+
   return (
     <Box
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       sx={{
         width: "100%",
         height: "100%",
@@ -106,6 +154,52 @@ export default function MobilePage1({
         position: "relative",
       }}
     >
+      {/* ── 原生 iOS 靈動極簡浮動指示器 (無任何橫幅或色塊，純粹精緻浮動小圓環) ── */}
+      {(pullDistance > 12 || isRefreshing) && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: `calc(env(safe-area-inset-top, 16px) + ${pullDistance * 0.7}px)`,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 99,
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            bgcolor: "rgba(15, 23, 42, 0.72)",
+            border: `1px solid ${sky.neonPrimary}55`,
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            boxShadow: `0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px ${sky.neonPrimary}44`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            transition: isRefreshing
+              ? "all 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)"
+              : "opacity 0.15s ease",
+            opacity: isRefreshing ? 1 : Math.min(1, pullDistance / 40),
+            scale: isRefreshing ? "1" : `${Math.min(1, 0.5 + pullDistance / 90)}`,
+          }}
+        >
+          {isRefreshing ? (
+            <CircularProgress
+              size={18}
+              thickness={4.5}
+              sx={{ color: sky.neonPrimary }}
+            />
+          ) : (
+            <SyncIcon
+              sx={{
+                color: sky.neonPrimary,
+                fontSize: 20,
+                transform: `rotate(${(pullDistance / 45) * 360}deg)`,
+                transition: "transform 0.05s linear",
+              }}
+            />
+          )}
+        </Box>
+      )}
       {/* 核心天氣看板 (依用戶指定順序：圖示 -> 氣象 -> 溫度 -> 最高最低 -> 地點) */}
       {period && (
         <Box

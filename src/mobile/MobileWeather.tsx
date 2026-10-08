@@ -80,29 +80,36 @@ export default function MobileWeather({
   }, []);
 
   const page2Ref = useRef<HTMLDivElement | null>(null);
+  const activePageRef = useRef(0);
 
-  // 程式化捲動至指定頁面（第 0 頁或第 1 頁）
+  // 程式化平滑捲動至指定頁面（第 0 頁或第 1 頁）
   const scrollToPage = useCallback((idx: number) => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const pageHeight = container.clientHeight;
+    const targetTop =
+      idx === 0
+        ? 0
+        : page2Ref.current
+        ? page2Ref.current.offsetTop
+        : container.clientHeight;
     container.scrollTo({
-      top: idx * pageHeight,
+      top: targetTop,
       behavior: "smooth",
     });
   }, []);
 
-  // 監聽外層滾動，更新目前 activePage 狀態（超過 40% 高度即識別為進入 Page 2）
+  // 監聽外層滾動，更新目前 activePage 狀態（過半自動識別）
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const pageHeight = container.clientHeight;
     if (pageHeight <= 0) return;
-    const currentIdx = container.scrollTop >= pageHeight * 0.4 ? 1 : 0;
-    if (currentIdx !== activePage) {
+    const currentIdx = container.scrollTop >= pageHeight * 0.5 ? 1 : 0;
+    if (currentIdx !== activePageRef.current) {
+      activePageRef.current = currentIdx;
       setActivePage(currentIdx);
     }
-  }, [activePage]);
+  }, []);
 
   return (
     <Box
@@ -192,7 +199,8 @@ export default function MobileWeather({
           zIndex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          scrollSnapType: activePage === 0 ? "y mandatory" : "none",
+          scrollSnapType: "y proximity",
+          scrollBehavior: "smooth",
           WebkitOverflowScrolling: "touch",
           overscrollBehaviorY: "contain",
           "&::-webkit-scrollbar": { display: "none" },
@@ -205,7 +213,7 @@ export default function MobileWeather({
             height: "100%",
             minHeight: "100%",
             scrollSnapAlign: "start",
-            scrollSnapStop: "normal",
+            scrollSnapStop: "always",
             position: "relative",
             flexShrink: 0,
           }}
@@ -239,7 +247,7 @@ export default function MobileWeather({
             minHeight: "100dvh",
             height: "auto",
             scrollSnapAlign: "start",
-            scrollSnapStop: "normal",
+            scrollSnapStop: "always",
             position: "relative",
             flexShrink: 0,
           }}

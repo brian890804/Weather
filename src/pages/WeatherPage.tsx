@@ -44,6 +44,7 @@ import MyLocationIcon from '@mui/icons-material/MyLocation';
 import NearMeIcon from '@mui/icons-material/NearMe';
 import { R } from '../App';
 import MobileWeather from '../mobile/MobileWeather';
+import NotificationSettingCard from '../components/common/NotificationSettingCard';
 import IOSLocationModal from '../components/ios/IOSLocationModal';
 import { getCurrentPosition, findNearestTownship } from '../utils/geolocation';
 import {
@@ -52,6 +53,10 @@ import {
   getMinutesSinceFetched,
   MANUAL_REFRESH_MIN_INTERVAL_MINUTES,
 } from '../utils/cache';
+import {
+  buildMorningNotificationContent,
+  checkAndTriggerMorningNotification,
+} from '../utils/notificationService';
 
 dayjs.locale('zh-tw');
 
@@ -78,6 +83,9 @@ export default function WeatherPage() {
     lastFetchedAt,
     selectedPeriodTime,
     setSelectedPeriodTime,
+    realtimeTemps,
+    realtimeWeather,
+    realtimeWinds,
   } = useWeatherStore();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -176,16 +184,9 @@ export default function WeatherPage() {
     [currentTownshipData]
   );
 
-  // 當前系統時間狀態（每 30 秒自動偵測一次，確保時間跨過 3hr 區間時能及時觸發切換）
-  const [currentTime, setCurrentTime] = useState(() => dayjs());
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(dayjs());
-    }, 30000);
-    return () => clearInterval(timer);
-  }, []);
-
   // 3. 判斷自動預設當前時段（以現在時間為基準；若找不到涵蓋當前的時段，找最接近現在的未過期時段）
+  const [currentTime, setCurrentTime] = useState(() => dayjs());
+
   const autoCurrentPeriod = useMemo(() => {
     if (!periods.length) return null;
     const match = periods.find((p) => {
@@ -206,6 +207,34 @@ export default function WeatherPage() {
     const target = periods.find((p) => p.startTime === selectedPeriodTime);
     return target ?? autoCurrentPeriod;
   }, [selectedPeriodTime, periods, autoCurrentPeriod]);
+
+  // 當前系統時間狀態（每 30 秒自動偵測一次，確保時間跨過 3hr 區間時能及時觸發切換與 06:30 晨間推播檢查）
+  useEffect(() => {
+    const activeTownshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : '';
+
+    const triggerCheck = () => {
+      checkAndTriggerMorningNotification(() =>
+        buildMorningNotificationContent(
+          selectedCity,
+          currentTownshipData?.townshipName || '',
+          displayPeriod,
+          realtimeTemps[activeTownshipKey],
+          realtimeWeather[activeTownshipKey]?.humidity,
+          realtimeWinds[activeTownshipKey]?.windSpeed,
+          realtimeWeather[activeTownshipKey]?.rainNow
+        )
+      );
+    };
+
+    const timer = setInterval(() => {
+      setCurrentTime(dayjs());
+      triggerCheck();
+    }, 30000);
+
+    triggerCheck();
+
+    return () => clearInterval(timer);
+  }, [selectedCity, selectedTownship, currentTownshipData, displayPeriod, realtimeTemps, realtimeWeather, realtimeWinds]);
 
   // 使用者手動切換時段：若點擊了「當前時段 (現)」，重置為 null 恢復自動模式；若點擊其他時段，鎖定使用者選擇
   const handleSelectPeriod = useCallback((startTime: string) => {
@@ -309,6 +338,7 @@ export default function WeatherPage() {
             onRefresh={handleRefresh}
             isAutoLocation={isAutoLocation}
             onLocateCurrentPosition={handleLocateCurrentPosition}
+            onShowMessage={(msg) => setSnackbarMsg(msg)}
           />
         ) : error ? (
           <Box
@@ -738,6 +768,16 @@ export default function WeatherPage() {
             {activeTab === 'overview' && (
               <>
                 {displayPeriod && <OverviewPanel period={displayPeriod} />}
+
+                {/* 晨間天氣靜音推播設定卡片 */}
+                <Box sx={{ mt: 3 }}>
+                  <NotificationSettingCard
+                    cityName={selectedCity}
+                    townshipName={currentTownshipData?.townshipName || ''}
+                    currentPeriod={displayPeriod}
+                    onShowMessage={(msg) => setSnackbarMsg(msg)}
+                  />
+                </Box>
 
                 {/* 水平滑動時段卡片清單 */}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 4, mb: 1.5 }}>

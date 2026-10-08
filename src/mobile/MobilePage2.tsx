@@ -5,6 +5,8 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import BentoCard from "./BentoCard";
 import MobileSevenDayList from "./MobileSevenDayList";
 import MobileClothingGuide from "./MobileClothingGuide";
+import NotificationSettingCard from "../components/common/NotificationSettingCard";
+import type { WeatherPeriod } from "../types/weather";
 import type { DayForecast, ActiveDayDetails, SkyTheme } from "./types";
 
 interface MobilePage2Props {
@@ -16,6 +18,10 @@ interface MobilePage2Props {
   activeDayDetails: ActiveDayDetails | null;
   onGoToPage1: () => void;
   sky: SkyTheme;
+  cityName: string;
+  townshipName: string;
+  currentPeriod: WeatherPeriod | null;
+  onShowMessage?: (msg: string) => void;
 }
 
 export default function MobilePage2({
@@ -26,6 +32,10 @@ export default function MobilePage2({
   activeDayDetails,
   onGoToPage1,
   sky,
+  cityName,
+  townshipName,
+  currentPeriod,
+  onShowMessage,
 }: MobilePage2Props) {
   const page2BentoCards = activeDayDetails?.bentoCards || [];
   const touchStartY = React.useRef<number | null>(null);
@@ -194,6 +204,15 @@ export default function MobilePage2({
         {activeDayDetails && (
           <MobileClothingGuide activeDayDetails={activeDayDetails} sky={sky} />
         )}
+
+        {/* 4. 每日 06:30 晨間天氣靜音推播卡片 */}
+        <NotificationSettingCard
+          cityName={cityName}
+          townshipName={townshipName}
+          currentPeriod={currentPeriod}
+          onShowMessage={onShowMessage}
+          isCyberpunkMobile={true}
+        />
 
         {/* 底部回頂端按鈕 */}
         <Box

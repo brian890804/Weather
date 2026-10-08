@@ -31,6 +31,7 @@ export default function MobileWeather({
   onRefresh,
   isAutoLocation,
   onLocateCurrentPosition,
+  onShowMessage,
 }: MobileWeatherProps) {
   const [activePage, setActivePage] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -253,6 +254,10 @@ export default function MobileWeather({
             activeDayDetails={activeDayDetails}
             onGoToPage1={() => scrollToPage(0)}
             sky={sky}
+            cityName={selectedCity}
+            townshipName={selectedTownship}
+            currentPeriod={period}
+            onShowMessage={onShowMessage}
           />
         </Box>
       </Box>

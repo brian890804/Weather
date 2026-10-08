@@ -20,6 +20,7 @@ export interface MobileWeatherProps {
   onRefresh?: () => Promise<void>;
   isAutoLocation?: boolean;
   onLocateCurrentPosition?: () => Promise<void>;
+  onShowMessage?: (msg: string) => void;
 }
 
 export interface DayForecast {

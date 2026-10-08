@@ -16,6 +16,9 @@ import {
   requestNotificationPermission,
   sendSilentNotification,
   buildMorningNotificationContent,
+  getNotificationTime,
+  setNotificationTime,
+  DEFAULT_NOTIFICATION_TIME,
 } from '../../utils/notificationService';
 import type { WeatherPeriod } from '../../types/weather';
 
@@ -47,7 +50,15 @@ export default function NotificationSettingCard({
     if (!isNotificationSupported()) return false;
     return isNotificationSubscribed() && Notification.permission === 'granted';
   });
+  const [scheduledTime, setScheduledTime] = useState(() => getNotificationTime());
   const [testing, setTesting] = useState(false);
+
+  const handleTimeChange = (newTime: string) => {
+    if (!newTime) return;
+    setScheduledTime(newTime);
+    setNotificationTime(newTime);
+    onShowMessage?.(`每日推播時間已設定為 ${newTime}`);
+  };
 
   const handleToggle = async (checked: boolean) => {
     if (!supported) {
@@ -64,7 +75,7 @@ export default function NotificationSettingCard({
       if (currentPerm === 'granted') {
         setNotificationSubscribed(true);
         setSubscribed(true);
-        onShowMessage?.('已開啟每日 06:30 晨間天氣靜音推播！');
+        onShowMessage?.(`已開啟每日 ${scheduledTime} 晨間天氣靜音推播！`);
       } else {
         setNotificationSubscribed(false);
         setSubscribed(false);
@@ -73,7 +84,7 @@ export default function NotificationSettingCard({
     } else {
       setNotificationSubscribed(false);
       setSubscribed(false);
-      onShowMessage?.('已關閉每日 06:30 晨間天氣推播');
+      onShowMessage?.('已關閉每日定時晨間天氣推播');
     }
   };
 
@@ -148,7 +159,7 @@ export default function NotificationSettingCard({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <NotificationsActiveIcon sx={{ color: '#00F0FF', fontSize: 22 }} />
           <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: '#FFF' }}>
-            每日 06:30 晨間天氣推播
+            每日晨間天氣推播
           </Typography>
         </Box>
         <Switch
@@ -164,6 +175,65 @@ export default function NotificationSettingCard({
             },
           }}
         />
+      </Box>
+
+      {/* 推播時間自訂設定區 */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 1,
+          bgcolor: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '10px',
+          px: 1.5,
+          py: 1,
+          mb: 1.5,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AccessTimeIcon sx={{ color: '#00F0FF', fontSize: 19 }} />
+          <Typography sx={{ fontSize: 13.5, color: '#F1F5F9', fontWeight: 700 }}>
+            推播時間設定
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <input
+            type="time"
+            value={scheduledTime}
+            onChange={(e) => handleTimeChange(e.target.value)}
+            style={{
+              background: 'rgba(15, 23, 42, 0.85)',
+              border: '1px solid rgba(0, 240, 255, 0.4)',
+              color: '#00F0FF',
+              borderRadius: '6px',
+              padding: '3px 8px',
+              fontSize: '14px',
+              fontWeight: '700',
+              fontFamily: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          />
+          {scheduledTime !== DEFAULT_NOTIFICATION_TIME && (
+            <Button
+              size="small"
+              onClick={() => handleTimeChange(DEFAULT_NOTIFICATION_TIME)}
+              sx={{
+                fontSize: 11.5,
+                color: '#94A3B8',
+                py: 0.2,
+                px: 0.8,
+                minWidth: 'auto',
+                '&:hover': { color: '#00F0FF' },
+              }}
+            >
+              預設(06:30)
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* 靜音重點提示 */}
@@ -188,9 +258,6 @@ export default function NotificationSettingCard({
 
       {/* 推播內容說明 */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1.5, pl: 0.5 }}>
-        <Typography sx={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.65)', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <AccessTimeIcon sx={{ fontSize: 15, color: '#94A3B8' }} /> 推播時間：每日早上 06:30
-        </Typography>
         <Typography sx={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.65)', display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <InfoOutlinedIcon sx={{ fontSize: 15, color: '#94A3B8' }} /> 涵蓋資訊：今日氣溫、室內/室外體感溫度、降雨機率、穿衣指南與帶傘建議
         </Typography>

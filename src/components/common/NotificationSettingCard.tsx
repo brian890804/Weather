@@ -188,8 +188,23 @@ export default function NotificationSettingCard({
 
     setTesting(true);
     try {
+      const content = buildMorningNotificationContent(
+        cityName,
+        townshipName,
+        currentPeriod,
+        realtimeTemp,
+        realtimeHumidity,
+        realtimeWindSpeed,
+        realtimeRainNow,
+      );
+
       if (workerUrl) {
-        const res = await triggerWorkerTestPush();
+        const res = await triggerWorkerTestPush({
+          title: content.title,
+          body: content.body,
+          cityName,
+          townshipName,
+        });
         if (res.ok) {
           onShowMessage?.(
             "已發出雲端靜音推播！因設定為嚴格靜音，請由螢幕頂端下滑檢視「通知中心」或鎖定螢幕查看。",
@@ -198,16 +213,6 @@ export default function NotificationSettingCard({
           onShowMessage?.(`測試失敗: ${res.message}`);
         }
       } else {
-        const content = buildMorningNotificationContent(
-          cityName,
-          townshipName,
-          currentPeriod,
-          realtimeTemp,
-          realtimeHumidity,
-          realtimeWindSpeed,
-          realtimeRainNow,
-        );
-
         const ok = await sendSilentNotification({
           title: content.title,
           body: content.body,

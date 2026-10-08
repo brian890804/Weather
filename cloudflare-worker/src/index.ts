@@ -50,6 +50,67 @@ function hashString(str: string): string {
   return Math.abs(hash).toString(36);
 }
 
+async function fetchWeatherSummary(
+  cityName: string,
+  townshipName: string,
+  apiKey?: string
+): Promise<{ title: string; body: string }> {
+  const key = apiKey || 'CWA-AD03D85A-1599-454E-A5F6-DA8F0C1E2EDA';
+  const cleanCity = (cityName || '臺北市').trim();
+  const cleanTownship = (townshipName || '').trim();
+
+  try {
+    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${key}&locationName=${encodeURIComponent(cleanCity)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`CWA API 回應代碼: ${res.status}`);
+    const data: any = await res.json();
+    const loc = data.records?.location?.[0];
+    if (!loc) throw new Error('未找到氣象資料');
+
+    const elements: Record<string, string> = {};
+    for (const el of loc.weatherElement || []) {
+      elements[el.elementName] = el.time?.[0]?.parameter?.parameterName || '';
+    }
+
+    const minT = elements.MinT ? parseInt(elements.MinT, 10) : 22;
+    const maxT = elements.MaxT ? parseInt(elements.MaxT, 10) : 28;
+    const pop = elements.PoP ? parseInt(elements.PoP, 10) : 0;
+    const wx = elements.Wx || '多雲';
+    const currentEst = Math.round((minT * 2 + maxT) / 3);
+
+    // 帶傘建議
+    const isRain = wx.includes('雨') || pop >= 30;
+    const umbrellaTip = isRain
+      ? (pop >= 50 ? '🌧 降雨機率高 · 務必帶傘' : '☂️ 局部短暫雨 · 建議攜折疊傘')
+      : '☀️ 降雨機率低 · 無需攜傘';
+
+    // 穿衣建議
+    let clothTip = '短袖輕裝';
+    if (maxT >= 30 || minT >= 26) {
+      clothTip = '清涼透氣短袖，注意防曬補水';
+    } else if (minT >= 22) {
+      clothTip = '舒適短袖或透氣襯衫';
+    } else if (minT >= 18) {
+      clothTip = '薄長袖配薄外套，注意溫差';
+    } else if (minT >= 15) {
+      clothTip = '長袖搭配厚夾克，防風保暖';
+    } else {
+      clothTip = '保暖毛衣與防寒大衣，慎防受寒';
+    }
+
+    return {
+      title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象`,
+      body: `🌡️ 當前約 ${currentEst}°C (今日 ${minT}°C ~ ${maxT}°C)\n💧 降雨率 ${pop}% · ${wx} (${umbrellaTip})\n👔 穿搭：${clothTip}`,
+    };
+  } catch (err: any) {
+    console.warn('[CWA] fetch error:', err);
+    return {
+      title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象快報`,
+      body: `🌡️ 晨間氣象已更新，出門請留意氣溫與溫差。\n💧 建議留意降雨機率並攜帶雨具。\n👔 建議採多層次洋蔥式穿搭。`,
+    };
+  }
+}
+
 async function sendWorkerPush(
   subscription: UserSubscriptionRecord['subscription'],
   payloadData: any,
@@ -67,17 +128,20 @@ async function sendWorkerPush(
         data: JSON.stringify(payloadData),
         options: { ttl: 86400, urgency: 'normal' },
       },
-      subscription,
+      {
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        expirationTime: null,
+      },
       vapid
     );
-    // 使用 normal 確保 Apple APNs / Google 即時秒級送達，靜音由 silent: true 控制
-    try {
-      pushRequest.headers.set('Urgency', 'normal');
-    } catch {
-      /* ignore */
-    }
 
-    const res = await fetch(subscription.endpoint, pushRequest);
+    const res = await fetch(subscription.endpoint, {
+      method: pushRequest.method,
+      headers: pushRequest.headers,
+      body: pushRequest.body,
+    });
+
     if (!res.ok) {
       const errText = await res.text();
       return { ok: false, status: res.status, error: errText };
@@ -146,14 +210,23 @@ export default {
     if (url.pathname === '/api/test-push' && request.method === 'POST') {
       try {
         const body: any = await request.json();
-        const { subscription } = body;
+        const { subscription, payload: clientPayload, cityName, townshipName } = body;
         if (!subscription || !subscription.endpoint) {
           return jsonResponse({ error: '缺少 subscription' }, 400);
         }
 
+        let title = clientPayload?.title;
+        let bodyText = clientPayload?.body;
+
+        if (!title || !bodyText) {
+          const summary = await fetchWeatherSummary(cityName || '臺北市', townshipName || '', env.CWA_API_KEY);
+          title = title || summary.title;
+          bodyText = bodyText || summary.body;
+        }
+
         const payload = {
-          title: '🌅 雲端靜音天氣推播 (測試)',
-          body: '這是由 Cloudflare Worker 發送的真實系統級 Web Push！\n即便網頁完全關閉，手機也能準時收到。',
+          title: title || '🌅 晨間氣象快報',
+          body: bodyText || '今日氣溫與降雨機率已更新。',
           tag: `test-push-${Date.now()}`,
           icon: '/icon-192.png',
           badge: '/icon-192.png',
@@ -240,14 +313,13 @@ export default {
         const record: UserSubscriptionRecord = JSON.parse(recordRaw);
         // 核對當前分鐘是否與使用者設定時間相符，且該時段今日尚未發送過
         if (record.time === currentTimeStr && record.lastNotifiedDate !== currentSlotKey) {
-          console.log(`[Cron] Sending scheduled morning weather to ${record.cityName} ${record.townshipName}`);
+          console.log(`[Cron] Fetching real-time weather and sending push to ${record.cityName} ${record.townshipName}`);
 
-          const title = `🌅 ${record.cityName}${record.townshipName} 晨間氣象 (${record.time})`;
-          const body = `🌡️ 今日晨間天氣快報已更新\n💧 出門請留意降雨機率與溫差\n👔 建議採多層次洋蔥式穿搭，並留意是否備傘。`;
+          const summary = await fetchWeatherSummary(record.cityName, record.townshipName, env.CWA_API_KEY);
 
           const payload = {
-            title,
-            body,
+            title: `${summary.title} (${record.time})`,
+            body: summary.body,
             tag: `weather-daily-${currentSlotKey}`,
             icon: '/icon-192.png',
             badge: '/icon-192.png',

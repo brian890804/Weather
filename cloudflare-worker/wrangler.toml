@@ -11,6 +11,7 @@ crons = ["* * * * *"]
 VAPID_PUBLIC_KEY = "BGtzxYkBhfX8S3w-i-GEIpcn8iH5eg4hVJmylEGEnJUCwpSoHkKa-pibyDgnyyCM9jDl0gT_r71k1OqFWxfZs3k"
 VAPID_PRIVATE_KEY = "OCjDw3elbSS2kJGKSh230u5FkbykHoXdYKV-LGgc-Go"
 VAPID_SUBJECT = "mailto:weather-app@example.com"
+CWA_API_KEY = "CWA-AD03D85A-1599-454E-A5F6-DA8F0C1E2EDA"
 
 # KV 命名空間綁定（儲存使用者的推播金鑰與自訂時間）
 [[kv_namespaces]]

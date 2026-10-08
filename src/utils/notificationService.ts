@@ -330,7 +330,12 @@ export async function syncSubscriptionToWorker(params: {
 /**
  * 透過 Cloudflare Worker 發送立即測試推播 (真實 Apple/Google 系統級 Web Push)
  */
-export async function triggerWorkerTestPush(): Promise<{ ok: boolean; message: string }> {
+export async function triggerWorkerTestPush(customPayload?: {
+  title?: string;
+  body?: string;
+  cityName?: string;
+  townshipName?: string;
+}): Promise<{ ok: boolean; message: string }> {
   const workerUrl = getWorkerUrl();
   if (!workerUrl) {
     return { ok: false, message: '尚未設定 Cloudflare Worker 網址' };
@@ -347,6 +352,9 @@ export async function triggerWorkerTestPush(): Promise<{ ok: boolean; message: s
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         subscription: sub.toJSON(),
+        payload: customPayload ? { title: customPayload.title, body: customPayload.body } : undefined,
+        cityName: customPayload?.cityName,
+        townshipName: customPayload?.townshipName,
       }),
     });
 

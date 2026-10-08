@@ -22,9 +22,11 @@ export function buildMorningNotificationContent(
   realtimeWindSpeed?: string,
   realtimeRainNow?: number
 ): WeatherNotificationContent {
-  // 1. 氣溫
+  // 1. 氣溫與當天高低溫
   const tempNum = realtimeTemp ? parseFloat(realtimeTemp) : todayPeriod ? parseFloat(todayPeriod.temperature) : 25;
   const tempStr = !isNaN(tempNum) ? `${Math.round(tempNum)}°C` : (todayPeriod?.temperature ? `${todayPeriod.temperature}°C` : '--°C');
+  const maxTempStr = todayPeriod?.maxTemperature ? `${todayPeriod.maxTemperature}°C` : (!isNaN(tempNum) ? `${Math.round(tempNum) + 2}°C` : '--°C');
+  const minTempStr = todayPeriod?.minTemperature ? `${todayPeriod.minTemperature}°C` : (!isNaN(tempNum) ? `${Math.round(tempNum) - 2}°C` : '--°C');
 
   // 2. 體感溫度 (室外 vs 室內)
   const rhNum = parseFloat(realtimeHumidity || todayPeriod?.relativeHumidity || '65') || 65;
@@ -47,16 +49,16 @@ export function buildMorningNotificationContent(
     : 0;
   const isRainingNow = (realtimeRainNow && realtimeRainNow > 0) || (todayPeriod?.weather && (todayPeriod.weather.includes('雨') || todayPeriod.weather.includes('陣雨')));
 
-  let umbrellaTip = '☀️ 無需攜傘';
+  let umbrellaTip = '無需攜傘';
   if (isRainingNow || popVal >= 40) {
-    umbrellaTip = isRainingNow ? '🌧 現場有雨 · 務必帶傘' : '🌧 降雨機率高 · 務必帶傘';
+    umbrellaTip = isRainingNow ? '現場有雨 · 務必帶傘' : '降雨機率高 · 務必帶傘';
   } else if (popVal >= 10) {
-    umbrellaTip = '☂️ 局部有短暫降雨機率 · 建議備折疊傘';
+    umbrellaTip = '局部短暫雨 · 建議備折疊傘';
   }
 
   // 4. 穿衣建議
   let clothTitle = '短袖輕裝';
-  let clothDetail = '薄短袖，天氣宜人舒適';
+  let clothDetail = '舒適短袖，天氣宜人';
   if (outdoorAppTemp >= 30) {
     clothTitle = '清涼透氣';
     clothDetail = '純棉短袖，注意防曬補水';
@@ -75,8 +77,9 @@ export function buildMorningNotificationContent(
   }
 
   const customTime = getNotificationTime();
-  const title = `🌅 ${cityName}${townshipName} 晨間氣象 (${customTime})`;
-  const body = `🌡️ 氣溫 ${tempStr} (室外體感 ${outdoorAppTemp}°C / 室內 ${indoorAppTemp}°C)\n💧 降雨機率 ${popVal}%\n👔 穿衣：${clothTitle}（${clothDetail}）\n${umbrellaTip}`;
+  const title = `🌅 ${cityName}${townshipName} 晨間氣象快報 (${customTime})`;
+  const wxDesc = todayPeriod?.weather ? ` · ${todayPeriod.weather}` : '';
+  const body = `🌡️ 當前氣溫 ${tempStr} · 今日 ${minTempStr} ~ ${maxTempStr}\n🏠 室內體感 ${indoorAppTemp}°C · 🌲 室外體感 ${outdoorAppTemp}°C\n💧 降雨率 ${popVal}%${wxDesc} (${umbrellaTip})\n👔 穿搭：${clothTitle}（${clothDetail}）`;
 
   return {
     title,

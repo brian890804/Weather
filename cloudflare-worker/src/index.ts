@@ -50,6 +50,50 @@ function hashString(str: string): string {
   return Math.abs(hash).toString(36);
 }
 
+// ── 氣象署 Steadman 體感溫度計算公式（與前端系統完全一致） ──
+function calculateSteadmanApparentTemp(T: number, RH: number, V: number): number {
+  const clampedRH = Math.max(0, Math.min(100, RH));
+  const clampedV = Math.max(0, V);
+  const e = (clampedRH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
+  const at = 1.04 * T + 0.2 * e - 0.65 * clampedV - 2.7;
+  return Math.round(at * 10) / 10;
+}
+
+// ── 室內 / 弱風遮蔽環境體感溫度公式 (V = 0) ──
+function calculateIndoorApparentTemp(T: number, RH: number): number {
+  const clampedRH = Math.max(0, Math.min(100, RH));
+  const e = (clampedRH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
+  const at = 1.04 * T + 0.2 * e - 2.7;
+  return Math.round(at * 10) / 10;
+}
+
+// ── 穿衣指引（依室外體感溫度嚴格判定） ──
+function getClothingRecommendation(outdoorAT: number): string {
+  if (outdoorAT >= 30) {
+    return '清涼透氣（短袖為宜，注意防曬補水）';
+  } else if (outdoorAT >= 25) {
+    return '短袖輕裝（短袖衣物，通風舒適）';
+  } else if (outdoorAT >= 20) {
+    return '薄款外套（薄外套或薄長袖）';
+  } else if (outdoorAT >= 15) {
+    return '保暖衣物（長袖毛衣或風衣保暖）';
+  } else {
+    return '厚實防寒（羽絨厚外套，注意防寒）';
+  }
+}
+
+// ── 雨具指引（依降雨機率與降雨現象判定） ──
+function getUmbrellaRecommendation(pop: number, wx: string): string {
+  const isRaining = wx.includes('雨') || wx.includes('雷');
+  if (isRaining || pop >= 40) {
+    return isRaining ? '🌧 現場有雨 · 務必帶傘' : '🌧 降雨機率高 · 務必攜傘';
+  } else if (pop >= 10) {
+    return '☂️ 局部短暫雨 · 建議備折疊傘';
+  } else {
+    return '☀️ 無需攜傘';
+  }
+}
+
 async function fetchWeatherSummary(
   cityName: string,
   townshipName: string,
@@ -58,56 +102,84 @@ async function fetchWeatherSummary(
   const key = apiKey || 'CWA-AD03D85A-1599-454E-A5F6-DA8F0C1E2EDA';
   const cleanCity = (cityName || '臺北市').trim();
   const cleanTownship = (townshipName || '').trim();
+  const normCity = cleanCity
+    .replace(/^台北/, '臺北')
+    .replace(/^台中/, '臺中')
+    .replace(/^台南/, '臺南')
+    .replace(/^台東/, '臺東');
 
   try {
-    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${key}&locationName=${encodeURIComponent(cleanCity)}`;
+    // 優先查詢氣象署各縣市鄉鎮 3 天精準預報 (F-D0047-091)
+    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization=${key}&LocationName=${encodeURIComponent(normCity)}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`CWA API 回應代碼: ${res.status}`);
+    if (!res.ok) throw new Error(`F-D0047-091 HTTP ${res.status}`);
     const data: any = await res.json();
-    const loc = data.records?.location?.[0];
-    if (!loc) throw new Error('未找到氣象資料');
+    const loc = data.records?.Locations?.[0]?.Location?.[0];
+    if (!loc) throw new Error('未取得 Location 資料');
 
-    const elements: Record<string, string> = {};
-    for (const el of loc.weatherElement || []) {
-      elements[el.elementName] = el.time?.[0]?.parameter?.parameterName || '';
+    const elMap: Record<string, string> = {};
+    for (const el of loc.WeatherElement || []) {
+      const val = el.Time?.[0]?.ElementValue?.[0];
+      if (val) {
+        if (typeof val.Temperature === 'string') elMap['T'] = val.Temperature;
+        if (typeof val.MaxTemperature === 'string') elMap['MaxT'] = val.MaxTemperature;
+        if (typeof val.MinTemperature === 'string') elMap['MinT'] = val.MinTemperature;
+        if (typeof val.RelativeHumidity === 'string') elMap['RH'] = val.RelativeHumidity;
+        if (typeof val.WindSpeed === 'string') elMap['V'] = val.WindSpeed;
+        if (typeof val.ProbabilityOfPrecipitation === 'string') elMap['PoP'] = val.ProbabilityOfPrecipitation;
+        if (typeof val.Weather === 'string') elMap['Wx'] = val.Weather;
+      }
     }
 
-    const minT = elements.MinT ? parseInt(elements.MinT, 10) : 22;
-    const maxT = elements.MaxT ? parseInt(elements.MaxT, 10) : 28;
-    const pop = elements.PoP ? parseInt(elements.PoP, 10) : 0;
-    const wx = elements.Wx || '多雲';
-    const currentEst = Math.round((minT * 2 + maxT) / 3);
+    const T = parseFloat(elMap['T'] || '26');
+    const maxT = parseFloat(elMap['MaxT'] || String(T));
+    const minT = parseFloat(elMap['MinT'] || String(T));
+    const RH = parseFloat(elMap['RH'] || '65');
+    const V = parseFloat(elMap['V'] || '2');
+    const pop = parseInt(elMap['PoP'] || '0', 10);
+    const wx = elMap['Wx'] || '多雲';
 
-    // 帶傘建議
-    const isRain = wx.includes('雨') || pop >= 30;
-    const umbrellaTip = isRain
-      ? (pop >= 50 ? '🌧 降雨機率高 · 務必帶傘' : '☂️ 局部短暫雨 · 建議攜折疊傘')
-      : '☀️ 降雨機率低 · 無需攜傘';
+    const outdoorAT = calculateSteadmanApparentTemp(T, RH, V);
+    const indoorAT = calculateIndoorApparentTemp(T, RH);
+    const clothing = getClothingRecommendation(outdoorAT);
+    const umbrella = getUmbrellaRecommendation(pop, wx);
 
-    // 穿衣建議
-    let clothTip = '短袖輕裝';
-    if (maxT >= 30 || minT >= 26) {
-      clothTip = '清涼透氣短袖，注意防曬補水';
-    } else if (minT >= 22) {
-      clothTip = '舒適短袖或透氣襯衫';
-    } else if (minT >= 18) {
-      clothTip = '薄長袖配薄外套，注意溫差';
-    } else if (minT >= 15) {
-      clothTip = '長袖搭配厚夾克，防風保暖';
-    } else {
-      clothTip = '保暖毛衣與防寒大衣，慎防受寒';
-    }
-
-    return {
-      title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象`,
-      body: `🌡️ 當前約 ${currentEst}°C (今日 ${minT}°C ~ ${maxT}°C)\n💧 降雨率 ${pop}% · ${wx} (${umbrellaTip})\n👔 穿搭：${clothTip}`,
-    };
-  } catch (err: any) {
-    console.warn('[CWA] fetch error:', err);
     return {
       title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象快報`,
-      body: `🌡️ 晨間氣象已更新，出門請留意氣溫與溫差。\n💧 建議留意降雨機率並攜帶雨具。\n👔 建議採多層次洋蔥式穿搭。`,
+      body: `🌡️ 當前氣溫 ${T}°C · 今日 ${minT}°C ~ ${maxT}°C\n🏠 室內體感 ${indoorAT}°C · 🌲 室外體感 ${outdoorAT}°C\n💧 降雨率 ${pop}% · ${wx} (${umbrella})\n👔 穿搭：${clothing}`,
     };
+  } catch (err: any) {
+    console.warn('[CWA F-D0047-091] fallback to F-C0032-001:', err);
+    try {
+      // 備援方案：36 小時預報 (F-C0032-001)
+      const url2 = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${key}&locationName=${encodeURIComponent(normCity)}`;
+      const res2 = await fetch(url2);
+      const data2: any = await res2.json();
+      const loc2 = data2.records?.location?.[0];
+      const elements2: Record<string, string> = {};
+      for (const el of loc2?.weatherElement || []) {
+        elements2[el.elementName] = el.time?.[0]?.parameter?.parameterName || '';
+      }
+      const minT2 = elements2.MinT ? parseFloat(elements2.MinT) : 22;
+      const maxT2 = elements2.MaxT ? parseFloat(elements2.MaxT) : 28;
+      const pop2 = elements2.PoP ? parseInt(elements2.PoP, 10) : 0;
+      const wx2 = elements2.Wx || '多雲';
+      const T2 = Math.round((minT2 * 2 + maxT2) / 3);
+      const outdoorAT2 = calculateSteadmanApparentTemp(T2, 65, 2);
+      const indoorAT2 = calculateIndoorApparentTemp(T2, 65);
+      const clothing2 = getClothingRecommendation(outdoorAT2);
+      const umbrella2 = getUmbrellaRecommendation(pop2, wx2);
+
+      return {
+        title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象快報`,
+        body: `🌡️ 當前約 ${T2}°C · 今日 ${minT2}°C ~ ${maxT2}°C\n🏠 室內體感 ${indoorAT2}°C · 🌲 室外體感 ${outdoorAT2}°C\n💧 降雨率 ${pop2}% · ${wx2} (${umbrella2})\n👔 穿搭：${clothing2}`,
+      };
+    } catch {
+      return {
+        title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象快報`,
+        body: `🌡️ 今日晨間氣象已更新，出門請留意氣溫與溫差。\n💧 建議留意降雨機率並攜帶雨具。\n👔 建議採多層次洋蔥式穿搭。`,
+      };
+    }
   }
 }
 

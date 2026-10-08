@@ -81,6 +81,8 @@ export default function MobileWeather({
 
   const page2Ref = useRef<HTMLDivElement | null>(null);
   const activePageRef = useRef(0);
+  const touchStartY = useRef<number | null>(null);
+  const startScrollTop = useRef<number>(0);
 
   // 程式化平滑捲動至指定頁面（第 0 頁或第 1 頁）
   const scrollToPage = useCallback((idx: number) => {
@@ -97,6 +99,41 @@ export default function MobileWeather({
       behavior: "smooth",
     });
   }, []);
+
+  // 輕觸磁吸：短距離偵測（只要滑動 40px 即輕鬆平滑切換，不需費力大動作）
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    const container = scrollContainerRef.current;
+    startScrollTop.current = container ? container.scrollTop : 0;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const endY = e.changedTouches[0].clientY;
+    const deltaY = touchStartY.current - endY; // 正值代表向上滑動 (去第 2 頁), 負值代表向下滑動 (去第 1 頁)
+    const pageHeight = container.clientHeight;
+
+    touchStartY.current = null;
+
+    // 1. 若在第 1 頁頂部區間向上推動超過 40px -> 磁吸門檻大幅調短，輕撥即流暢進入第 2 頁
+    if (startScrollTop.current < 60 && deltaY > 40) {
+      scrollToPage(1);
+      return;
+    }
+
+    // 2. 若在第 2 頁頂部區間向下拉動超過 40px -> 輕推即流暢返回第 1 頁
+    if (
+      startScrollTop.current >= pageHeight - 70 &&
+      startScrollTop.current <= pageHeight + 70 &&
+      deltaY < -40
+    ) {
+      scrollToPage(0);
+      return;
+    }
+  }, [scrollToPage]);
 
   // 監聽外層滾動，更新目前 activePage 狀態（過半自動識別）
   const handleScroll = useCallback(() => {
@@ -126,7 +163,7 @@ export default function MobileWeather({
         zIndex: 10,
       }}
     >
-      {/* ── Cyberpunk 動態天氣背景光暈與環境光斑層 ── */}
+      {/* ── 現代優雅天氣動態微流光背景 (依天氣主題色平滑漫射飄移) ── */}
       {/* 1. 全域深層漸層背景光暈 */}
       <Box
         sx={{
@@ -135,50 +172,74 @@ export default function MobileWeather({
           background: sky.glow,
           pointerEvents: "none",
           zIndex: 0,
-          transition: "background 0.8s ease",
+          transition: "background 1s ease",
         }}
       />
 
-      {/* 2. 動態 Cyberpunk 呼吸光斑 (右上角主霓虹光斑) */}
+      {/* 2. 主色調天頂柔光斑 (緩慢優雅漫遊 20s) */}
       <Box
         sx={{
           position: "absolute",
-          top: "-10%",
-          right: "-15%",
-          width: { xs: 340, sm: 420 },
-          height: { xs: 340, sm: 420 },
+          top: "-12%",
+          right: "-12%",
+          width: { xs: 360, sm: 460 },
+          height: { xs: 360, sm: 460 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonPrimary}59 0%, ${sky.neonSecondary}26 50%, transparent 70%)`,
-          filter: "blur(60px)",
+          background: `radial-gradient(circle, ${sky.neonPrimary}48 0%, ${sky.neonSecondary}1c 45%, transparent 72%)`,
+          filter: "blur(80px)",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "auroraPulseTop 8s ease-in-out infinite alternate",
-          "@keyframes auroraPulseTop": {
-            "0%": { transform: "translate(0, 0) scale(1)", opacity: 0.85 },
-            "50%": { transform: "translate(-20px, 25px) scale(1.15)", opacity: 1 },
-            "100%": { transform: "translate(15px, -15px) scale(0.95)", opacity: 0.75 },
+          animation: "ambientAurora1 20s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          "@keyframes ambientAurora1": {
+            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.75 },
+            "33%": { transform: "translate3d(-35px, 25px, 0) scale(1.08)", opacity: 0.9 },
+            "66%": { transform: "translate3d(20px, 40px, 0) scale(0.96)", opacity: 0.8 },
+            "100%": { transform: "translate3d(-15px, 15px, 0) scale(1.02)", opacity: 0.85 },
           },
         }}
       />
 
-      {/* 3. 動態 Cyberpunk 呼吸光斑 (左下角次霓虹光斑) */}
+      {/* 3. 次色調左下方逆向柔光斑 (深層緩慢飄動 24s) */}
       <Box
         sx={{
           position: "absolute",
-          bottom: "5%",
-          left: "-20%",
-          width: { xs: 320, sm: 400 },
-          height: { xs: 320, sm: 400 },
+          bottom: "3%",
+          left: "-18%",
+          width: { xs: 340, sm: 440 },
+          height: { xs: 340, sm: 440 },
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${sky.neonSecondary}4d 0%, ${sky.neonPrimary}20 50%, transparent 70%)`,
-          filter: "blur(70px)",
+          background: `radial-gradient(circle, ${sky.neonSecondary}3d 0%, ${sky.neonPrimary}15 50%, transparent 70%)`,
+          filter: "blur(85px)",
           pointerEvents: "none",
           zIndex: 0,
-          animation: "auroraPulseBottom 10s ease-in-out infinite alternate",
-          "@keyframes auroraPulseBottom": {
-            "0%": { transform: "translate(0, 0) scale(1)", opacity: 0.7 },
-            "50%": { transform: "translate(25px, -20px) scale(1.12)", opacity: 0.95 },
-            "100%": { transform: "translate(-15px, 15px) scale(0.9)", opacity: 0.65 },
+          animation: "ambientAurora2 24s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          "@keyframes ambientAurora2": {
+            "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.7 },
+            "33%": { transform: "translate3d(30px, -25px, 0) scale(1.06)", opacity: 0.85 },
+            "66%": { transform: "translate3d(-20px, -35px, 0) scale(0.95)", opacity: 0.65 },
+            "100%": { transform: "translate3d(15px, -15px, 0) scale(1.03)", opacity: 0.75 },
+          },
+        }}
+      />
+
+      {/* 4. 中景核心微光擴散 (中央呼吸微動 28s) */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: "36%",
+          right: "-15%",
+          width: { xs: 300, sm: 380 },
+          height: { xs: 300, sm: 380 },
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${sky.neonPrimary}25 0%, transparent 68%)`,
+          filter: "blur(90px)",
+          pointerEvents: "none",
+          zIndex: 0,
+          animation: "ambientAurora3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate",
+          "@keyframes ambientAurora3": {
+            "0%": { transform: "translate3d(0, 0, 0) scale(0.95)", opacity: 0.5 },
+            "50%": { transform: "translate3d(-30px, -20px, 0) scale(1.1)", opacity: 0.75 },
+            "100%": { transform: "translate3d(15px, 20px, 0) scale(1)", opacity: 0.55 },
           },
         }}
       />
@@ -190,6 +251,8 @@ export default function MobileWeather({
       <Box
         ref={scrollContainerRef}
         onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         sx={{
           position: "absolute",
           top: 0,
@@ -213,7 +276,7 @@ export default function MobileWeather({
             height: "100%",
             minHeight: "100%",
             scrollSnapAlign: "start",
-            scrollSnapStop: "always",
+            scrollSnapStop: "normal",
             position: "relative",
             flexShrink: 0,
           }}
@@ -247,7 +310,7 @@ export default function MobileWeather({
             minHeight: "100dvh",
             height: "auto",
             scrollSnapAlign: "start",
-            scrollSnapStop: "always",
+            scrollSnapStop: "normal",
             position: "relative",
             flexShrink: 0,
           }}

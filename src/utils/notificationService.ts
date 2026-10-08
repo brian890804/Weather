@@ -110,6 +110,9 @@ export function getNotificationTime(): string {
 export function setNotificationTime(timeStr: string): void {
   try {
     localStorage.setItem(STORAGE_KEY_NOTIFICATION_TIME, timeStr);
+    // 使用者重新設定時間時，清空最後通知標記，確保新設定的時間在今日能順利觸發
+    localStorage.removeItem(STORAGE_KEY_LAST_NOTIFIED);
+    console.log(`[NotificationService] Updated notification time to: ${timeStr}, cleared last notified flag`);
   } catch {
     /* ignore */
   }
@@ -121,6 +124,10 @@ export function isNotificationSubscribed(): boolean {
 
 export function setNotificationSubscribed(subscribed: boolean): void {
   localStorage.setItem(STORAGE_KEY_SUBSCRIBED, subscribed ? 'true' : 'false');
+  if (subscribed) {
+    // 開啟訂閱時也允許今日新設定的時段觸發
+    localStorage.removeItem(STORAGE_KEY_LAST_NOTIFIED);
+  }
 }
 
 export function isNotificationSupported(): boolean {
@@ -129,11 +136,16 @@ export function isNotificationSupported(): boolean {
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (!isNotificationSupported()) return 'denied';
-  return await Notification.requestPermission();
+  try {
+    return await Notification.requestPermission();
+  } catch (err) {
+    console.warn('[NotificationService] requestNotificationPermission error:', err);
+    return 'denied';
+  }
 }
 
 /**
- * 透過 Service Worker 發出嚴格靜音 (silent: true) 通知
+ * 透過 Service Worker 或 window.Notification 發出嚴格靜音 (silent: true) 通知
  */
 export async function sendSilentNotification(payload: {
   title: string;
@@ -141,46 +153,83 @@ export async function sendSilentNotification(payload: {
   tag?: string;
   data?: any;
 }): Promise<boolean> {
-  if (!isNotificationSupported()) return false;
-  if (Notification.permission !== 'granted') return false;
-
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    if (registration) {
-      await registration.showNotification(payload.title, {
-        body: payload.body,
-        icon: './icon-192.png',
-        badge: './icon-192.png',
-        tag: payload.tag || 'weather-morning-alert',
-        silent: true, // 核心需求：一定要是靜音
-        data: payload.data || { url: './' },
-      });
-      return true;
-    }
-  } catch (err) {
-    console.warn('sendSilentNotification error:', err);
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    console.warn('[NotificationService] Notification API is not available');
+    return false;
   }
+  if (Notification.permission !== 'granted') {
+    console.warn('[NotificationService] Notification permission is not granted:', Notification.permission);
+    return false;
+  }
+
+  const notificationTag = payload.tag || `weather-alert-${Date.now()}`;
+  const notificationOptions: NotificationOptions = {
+    body: payload.body,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: notificationTag,
+    silent: true, // 核心需求：一定要是靜音 (無音效、無震動)
+    data: payload.data || { url: './' },
+  };
+
+  // 1. 優先嘗試透過 ServiceWorker 顯示通知 (PWA / Mobile Safari / Android 必需)
+  if ('serviceWorker' in navigator) {
+    try {
+      let reg: ServiceWorkerRegistration | null = null;
+      try {
+        reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+        ]);
+      } catch {
+        reg = null;
+      }
+
+      if (!reg) {
+        reg = (await navigator.serviceWorker.getRegistration()) || null;
+      }
+
+      if (reg && typeof reg.showNotification === 'function') {
+        await reg.showNotification(payload.title, notificationOptions);
+        console.log('[NotificationService] Successfully sent silent notification via ServiceWorker');
+        return true;
+      }
+    } catch (swErr) {
+      console.warn('[NotificationService] ServiceWorker showNotification failed, trying fallback:', swErr);
+    }
+  }
+
+  // 2. 回退嘗試直接使用 window.Notification (桌面瀏覽器或 ServiceWorker 載入中時支援)
+  try {
+    new Notification(payload.title, notificationOptions);
+    console.log('[NotificationService] Successfully sent silent notification via window.Notification');
+    return true;
+  } catch (notifErr) {
+    console.error('[NotificationService] All notification methods failed:', notifErr);
+  }
+
   return false;
 }
 
 /**
- * 前端檢查並執行自訂時間定時推播 (若分頁開著或由背景喚醒時檢測，預設 06:30)
+ * 前端檢查並執行自訂時間定時推播 (若分頁開著或由背景喚醒時檢測)
  */
 export async function checkAndTriggerMorningNotification(
   getContent: () => WeatherNotificationContent
 ): Promise<void> {
   if (!isNotificationSubscribed()) return;
-  if (Notification.permission !== 'granted') return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
 
   const now = dayjs();
   const todayStr = now.format('YYYY-MM-DD');
+  const scheduledTime = getNotificationTime();
+  const currentSlotKey = `${todayStr}_${scheduledTime}`;
   const lastNotified = localStorage.getItem(STORAGE_KEY_LAST_NOTIFIED);
 
-  // 檢查是否今天已經發送過
-  if (lastNotified === todayStr) return;
+  // 檢查此特定時段 (例如 2026-10-08_10:42) 今天是否已經發送過
+  if (lastNotified === currentSlotKey) return;
 
   // 解析自訂推播時間 (HH:mm)
-  const scheduledTime = getNotificationTime();
   const [targetHourStr, targetMinuteStr] = scheduledTime.split(':');
   const targetHour = parseInt(targetHourStr, 10);
   const targetMinute = parseInt(targetMinuteStr, 10);
@@ -188,23 +237,24 @@ export async function checkAndTriggerMorningNotification(
   const currentHour = now.hour();
   const currentMinute = now.minute();
 
-  // 判斷時間是否在設定時間之後 (且在設定時間起算的 5 小時有效時間窗口內觸發)
+  // 判斷時間是否在設定時間之後 (且在設定時間起算的 4 小時有效時間窗口內觸發)
   const currentTotalMins = currentHour * 60 + currentMinute;
   const targetTotalMins = targetHour * 60 + targetMinute;
 
-  // 在排定時間至其後 5 小時之內觸發
-  const isTimeReached = currentTotalMins >= targetTotalMins && currentTotalMins <= targetTotalMins + 300;
+  const isTimeReached = currentTotalMins >= targetTotalMins && currentTotalMins <= targetTotalMins + 240;
 
   if (isTimeReached) {
+    console.log(`[NotificationService] Scheduled time reached (${scheduledTime})! Triggering silent notification...`);
     const content = getContent();
     const success = await sendSilentNotification({
       title: content.title,
       body: content.body,
-      tag: `weather-scheduled-${todayStr}`,
+      tag: `weather-scheduled-${currentSlotKey}`,
     });
 
     if (success) {
-      localStorage.setItem(STORAGE_KEY_LAST_NOTIFIED, todayStr);
+      localStorage.setItem(STORAGE_KEY_LAST_NOTIFIED, currentSlotKey);
+      console.log(`[NotificationService] Successfully recorded last notified slot: ${currentSlotKey}`);
     }
   }
 }

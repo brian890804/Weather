@@ -229,11 +229,23 @@ export default function WeatherPage() {
     const timer = setInterval(() => {
       setCurrentTime(dayjs());
       triggerCheck();
-    }, 30000);
+    }, 10000);
+
+    const handleWakeOrFocus = () => {
+      setCurrentTime(dayjs());
+      triggerCheck();
+    };
+
+    document.addEventListener('visibilitychange', handleWakeOrFocus);
+    window.addEventListener('focus', handleWakeOrFocus);
 
     triggerCheck();
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleWakeOrFocus);
+      window.removeEventListener('focus', handleWakeOrFocus);
+    };
   }, [selectedCity, selectedTownship, currentTownshipData, displayPeriod, realtimeTemps, realtimeWeather, realtimeWinds]);
 
   // 使用者手動切換時段：若點擊了「當前時段 (現)」，重置為 null 恢復自動模式；若點擊其他時段，鎖定使用者選擇

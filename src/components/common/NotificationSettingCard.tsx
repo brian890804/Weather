@@ -46,6 +46,10 @@ export default function NotificationSettingCard({
   isCyberpunkMobile = false,
 }: NotificationSettingCardProps) {
   const [supported] = useState(() => isNotificationSupported());
+  const [permissionState, setPermissionState] = useState<NotificationPermission>(() => {
+    if (typeof Notification === 'undefined') return 'denied';
+    return Notification.permission;
+  });
   const [subscribed, setSubscribed] = useState(() => {
     if (!isNotificationSupported()) return false;
     return isNotificationSubscribed() && Notification.permission === 'granted';
@@ -53,11 +57,36 @@ export default function NotificationSettingCard({
   const [scheduledTime, setScheduledTime] = useState(() => getNotificationTime());
   const [testing, setTesting] = useState(false);
 
-  const handleTimeChange = (newTime: string) => {
+  const handleTimeChange = async (newTime: string) => {
     if (!newTime) return;
     setScheduledTime(newTime);
     setNotificationTime(newTime);
-    onShowMessage?.(`每日推播時間已設定為 ${newTime}`);
+
+    // 若尚未開啟推播開關，自動為使用者嘗試請求權限並開啟
+    if (!subscribed) {
+      if (!supported) {
+        onShowMessage?.(`推播時間已設定為 ${newTime}（目前瀏覽器不支援 Notification API）`);
+        return;
+      }
+
+      let currentPerm = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+      if (currentPerm !== 'granted') {
+        currentPerm = await requestNotificationPermission();
+        setPermissionState(currentPerm);
+      }
+
+      if (currentPerm === 'granted') {
+        setNotificationSubscribed(true);
+        setSubscribed(true);
+        onShowMessage?.(`推播時間已設定為 ${newTime}，並已成功啟用每日推播！`);
+        return;
+      } else {
+        onShowMessage?.(`推播時間已設定為 ${newTime}（請記得允許瀏覽器通知權限並開啟開關）`);
+        return;
+      }
+    }
+
+    onShowMessage?.(`每日推播時間已更新為 ${newTime}`);
   };
 
   const handleToggle = async (checked: boolean) => {
@@ -67,9 +96,10 @@ export default function NotificationSettingCard({
     }
 
     if (checked) {
-      let currentPerm = Notification.permission;
+      let currentPerm = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
       if (currentPerm !== 'granted') {
         currentPerm = await requestNotificationPermission();
+        setPermissionState(currentPerm);
       }
 
       if (currentPerm === 'granted') {
@@ -94,9 +124,10 @@ export default function NotificationSettingCard({
       return;
     }
 
-    let currentPerm = Notification.permission;
+    let currentPerm = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
     if (currentPerm !== 'granted') {
       currentPerm = await requestNotificationPermission();
+      setPermissionState(currentPerm);
     }
 
     if (currentPerm !== 'granted') {
@@ -179,6 +210,38 @@ export default function NotificationSettingCard({
           }}
         />
       </Box>
+
+      {/* 權限狀態提示 */}
+      {permissionState === 'denied' && (
+        <Box
+          sx={{
+            mb: 1.5,
+            p: 1.25,
+            borderRadius: '8px',
+            bgcolor: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+          }}
+        >
+          <Typography sx={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, lineHeight: 1.4 }}>
+            ⚠️ 瀏覽器目前「封鎖」了通知權限。請在網址列左側點擊鎖頭或設定，將通知改為「允許」後重新整理頁面。
+          </Typography>
+        </Box>
+      )}
+      {permissionState === 'default' && (
+        <Box
+          sx={{
+            mb: 1.5,
+            p: 1.25,
+            borderRadius: '8px',
+            bgcolor: 'rgba(234, 179, 8, 0.12)',
+            border: '1px solid rgba(234, 179, 8, 0.35)',
+          }}
+        >
+          <Typography sx={{ fontSize: 12, color: '#FDE047', fontWeight: 600, lineHeight: 1.4 }}>
+            🔔 尚未授予系統通知權限。請開啟上方開關或點擊測試按鈕以授權通知。
+          </Typography>
+        </Box>
+      )}
 
       {/* 推播時間自訂設定區 */}
       <Box

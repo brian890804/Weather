@@ -190,8 +190,27 @@ export function calculateSteadmanApparentTemp(
 
   // 水氣壓 e (百帕 hPa)
   const e = (RH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
-  // 體感溫度公式
+  // 體感溫度公式 (室外通風含風速散熱)
   const AT = (1.04 * T) + (0.2 * e) - (0.65 * V) - 2.7;
+
+  return AT.toFixed(1);
+}
+
+/**
+ * 計算室內 / 弱風遮蔽環境之體感溫度（風速 V = 0）：
+ * 體感溫度 = (1.04 × T) + (0.2 × e) - 2.7
+ */
+export function calculateIndoorApparentTemp(
+  temperature: number,
+  relativeHumidity: number
+): string {
+  const T = temperature;
+  const RH = Math.max(0, Math.min(100, relativeHumidity));
+
+  // 水氣壓 e (百帕 hPa)
+  const e = (RH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
+  // 室內無風散熱公式
+  const AT = (1.04 * T) + (0.2 * e) - 2.7;
 
   return AT.toFixed(1);
 }

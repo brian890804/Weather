@@ -4,11 +4,16 @@ import ThermostatIcon from "@mui/icons-material/Thermostat";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import AirIcon from "@mui/icons-material/Air";
 import NavigationIcon from "@mui/icons-material/Navigation";
+import DeckIcon from "@mui/icons-material/Deck";
+import RoofingIcon from "@mui/icons-material/Roofing";
 import type { WeatherPeriod } from "../types/weather";
 import type { DayForecast, HudMetricItem, ActiveDayDetails } from "./types";
 import { useWeatherStore } from "../store/weatherStore";
 import { computeActiveDayDetails } from "./dayDetailsHelper";
-import { calculateSteadmanApparentTemp } from "../utils/weatherUtils";
+import {
+  calculateSteadmanApparentTemp,
+  calculateIndoorApparentTemp,
+} from "../utils/weatherUtils";
 
 function getWindDegree(dir: string): number {
   if (!dir) return 0;
@@ -227,45 +232,46 @@ export function useMobileWeatherData({
       (period.weather && (period.weather.includes("雨") || period.weather.includes("陣雨")))
     );
 
-    // 計算精準體感溫度：若為當前實況，依氣象署 Steadman 公式由「實測氣溫 + 相對濕度 + 實測風速」動態計算
-    let computedAppTempStr = period.maxApparentTemperature;
-    if (isViewingCurrent && rtTemp) {
-      const curTempNum = parseFloat(rtTemp);
-      const curRhNum = parseFloat(activeStation?.humidity || period.relativeHumidity) || 65;
-      const curWindNum = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
-      if (!isNaN(curTempNum)) {
-        computedAppTempStr = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
-      }
+    // 計算精準室外體感（含實測風速散熱）：依氣象署 Steadman 公式由「氣溫 + 相對濕度 + 風速」動態計算
+    const tempNum = isViewingCurrent && rtTemp ? parseFloat(rtTemp) : parseFloat(period.temperature);
+    const rhNum = parseFloat(activeStation?.humidity || period.relativeHumidity) || 65;
+    const windNum = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
+
+    let outdoorAppTempStr = period.maxApparentTemperature;
+    let indoorAppTempStr = period.maxApparentTemperature;
+
+    if (!isNaN(tempNum)) {
+      outdoorAppTempStr = calculateSteadmanApparentTemp(tempNum, rhNum, windNum);
+      indoorAppTempStr = calculateIndoorApparentTemp(tempNum, rhNum);
     }
 
-    const appTemp = Number(computedAppTempStr) || 20;
-    const tempPercent = Math.min(100, Math.max(15, (appTemp / 40) * 100));
+    const outdoorAppTemp = Number(outdoorAppTempStr) || 20;
+    const indoorAppTemp = Number(indoorAppTempStr) || 20;
+    const outdoorPercent = Math.min(100, Math.max(15, (outdoorAppTemp / 40) * 100));
+    const indoorPercent = Math.min(100, Math.max(15, (indoorAppTemp / 40) * 100));
     const popVal = parseInt(popStr) || 0;
 
     const windDir = period.windDirection || "偏東風";
     const windDirText = rtWind ? rtWind.windCardinal : getWindCardinal(windDir);
     const windDirDeg = rtWind ? rtWind.windDegree : getWindDegree(windDir);
-    const windVal = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 0);
-    const windSpeedText = rtWind ? `${rtWind.windSpeed}m/s` : `${period.windSpeed}m/s`;
-    const windPercent = Math.min(100, Math.max(15, (windVal / 15) * 100));
 
-    // 穿衣生活指南計算（依體感溫度判斷）
+    // 穿衣生活指南計算（依室外真實體感溫度判斷）
     let clothTitle = "短袖輕裝";
     let clothDetail = "純棉短袖，天氣宜人";
     let clothIcon = "👕";
-    if (appTemp >= 30) {
+    if (outdoorAppTemp >= 30) {
       clothTitle = "清涼透氣";
       clothDetail = "短袖為宜，注意防曬補水";
       clothIcon = "☀️";
-    } else if (appTemp >= 25) {
+    } else if (outdoorAppTemp >= 25) {
       clothTitle = "短袖輕裝";
       clothDetail = "短袖衣物，通風舒適";
       clothIcon = "👕";
-    } else if (appTemp >= 20) {
+    } else if (outdoorAppTemp >= 20) {
       clothTitle = "薄款外套";
       clothDetail = "薄外套或薄長袖";
       clothIcon = "🧥";
-    } else if (appTemp >= 15) {
+    } else if (outdoorAppTemp >= 15) {
       clothTitle = "保暖衣物";
       clothDetail = "長袖毛衣或風衣保暖";
       clothIcon = "🧣";
@@ -288,14 +294,24 @@ export function useMobileWeatherData({
 
     const metrics: HudMetricItem[] = [
       {
-        key: "apparentTemp",
-        label: "體感",
-        subLabel: isViewingCurrent && rtTemp ? "實測精算體感" : "體感溫度",
-        value: `${computedAppTempStr}°`,
-        percent: tempPercent,
+        key: "outdoorApparentTemp",
+        label: "室外體感",
+        subLabel: "含風速散熱",
+        value: `${outdoorAppTempStr}°`,
+        percent: outdoorPercent,
         neonColor: "#FF7A00",
         neonGlow: "rgba(255, 122, 0, 0.65)",
-        miniIcon: React.createElement(ThermostatIcon, { sx: { fontSize: 21 } }),
+        miniIcon: React.createElement(DeckIcon, { sx: { fontSize: 20 } }),
+      },
+      {
+        key: "indoorApparentTemp",
+        label: "室內體感",
+        subLabel: "弱風/遮蔽環境",
+        value: `${indoorAppTempStr}°`,
+        percent: indoorPercent,
+        neonColor: "#F59E0B",
+        neonGlow: "rgba(245, 158, 11, 0.65)",
+        miniIcon: React.createElement(RoofingIcon, { sx: { fontSize: 21 } }),
       },
       {
         key: "pop",
@@ -323,16 +339,6 @@ export function useMobileWeatherData({
             transition: "transform 0.4s ease",
           },
         }),
-      },
-      {
-        key: "windSpeed",
-        label: "風速",
-        subLabel: rtWind ? "即測風速" : "風向風速",
-        value: windSpeedText,
-        percent: windPercent,
-        neonColor: "#D946EF",
-        neonGlow: "rgba(217, 70, 239, 0.7)",
-        miniIcon: React.createElement(AirIcon, { sx: { fontSize: 20 } }),
       },
     ];
 

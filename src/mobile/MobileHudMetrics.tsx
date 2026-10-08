@@ -152,10 +152,11 @@ export default function MobileHudMetrics({
           {/* 儀表下方標籤 */}
           <Typography
             sx={{
-              fontSize: { xs: 16, sm: 17 },
+              fontSize: { xs: 13.5, sm: 15 },
               fontWeight: 800,
               color: "#FFF",
-              letterSpacing: 0.5,
+              letterSpacing: 0.2,
+              whiteSpace: "nowrap",
             }}
           >
             {item.label}

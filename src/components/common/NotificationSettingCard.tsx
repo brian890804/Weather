@@ -192,10 +192,10 @@ export default function NotificationSettingCard({
         const res = await triggerWorkerTestPush();
         if (res.ok) {
           onShowMessage?.(
-            "已由 Cloudflare Worker 發出真實雲端靜音推播！即便網頁關閉也能收到。",
+            "已發出雲端靜音推播！因設定為嚴格靜音，請由螢幕頂端下滑檢視「通知中心」或鎖定螢幕查看。",
           );
         } else {
-          onShowMessage?.(res.message);
+          onShowMessage?.(`測試失敗: ${res.message}`);
         }
       } else {
         const content = buildMorningNotificationContent(

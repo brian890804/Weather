@@ -154,7 +154,7 @@ export default function NotificationSettingCard({
 
         if (workerUrl) {
           syncSubscriptionToWorker({ cityName, townshipName, scheduledTime }).then((res) => {
-            if (res.ok) onShowMessage?.(res.message);
+            onShowMessage?.(res.message);
           });
         }
       } else {
@@ -281,7 +281,7 @@ export default function NotificationSettingCard({
           >
             <CloudQueueIcon sx={{ fontSize: 13, color: workerUrl ? '#00F0FF' : '#94A3B8' }} />
             <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: workerUrl ? '#00F0FF' : '#94A3B8' }}>
-              {workerUrl ? '雲端已連線' : '設定雲端'}
+              {workerUrl ? `雲端 (${scheduledTime})` : '設定雲端'}
             </Typography>
           </Box>
 
@@ -337,16 +337,16 @@ export default function NotificationSettingCard({
         }}
       >
         {/* 左側：時鐘與時間輸入框 */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+        {/* 左側：時鐘與原生系統時間選擇器 */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
           <AccessTimeIcon sx={{ color: '#00F0FF', fontSize: 16 }} />
           <input
             type="time"
-            value={tempTime}
-            onChange={(e) => setTempTime(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleConfirmTime((e.target as HTMLInputElement).value);
-                (e.target as HTMLInputElement).blur();
+            value={scheduledTime}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val && val !== scheduledTime) {
+                handleConfirmTime(val);
               }
             }}
             onClick={(e) => {
@@ -358,8 +358,7 @@ export default function NotificationSettingCard({
             }}
             style={{
               background: 'rgba(15, 23, 42, 0.95)',
-              border: tempTime !== scheduledTime ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.45)',
-              boxShadow: tempTime !== scheduledTime ? '0 0 8px rgba(0, 240, 255, 0.4)' : 'none',
+              border: '1px solid rgba(0, 240, 255, 0.45)',
               color: '#00F0FF',
               borderRadius: '6px',
               padding: '4px 8px',
@@ -372,36 +371,10 @@ export default function NotificationSettingCard({
               WebkitUserSelect: 'auto',
               userSelect: 'auto',
               display: 'inline-block',
-              transition: 'all 0.2s ease',
             }}
           />
 
-          {/* 若選擇的時間與已排程的時間不同，顯示高亮的 [確認設定] 按鈕 */}
-          {tempTime !== scheduledTime && (
-            <Button
-              size="small"
-              variant="contained"
-              onClick={() => handleConfirmTime(tempTime)}
-              disabled={syncingTime}
-              startIcon={syncingTime ? <CircularProgress size={10} color="inherit" /> : undefined}
-              sx={{
-                fontSize: 11,
-                fontWeight: 800,
-                bgcolor: '#00F0FF',
-                color: '#0a0f1e',
-                py: 0.2,
-                px: 1,
-                minWidth: 'auto',
-                boxShadow: '0 0 10px rgba(0, 240, 255, 0.5)',
-                '&:hover': { bgcolor: '#38BDF8' },
-                '&:active': { transform: 'scale(0.96)' },
-              }}
-            >
-              確認設定
-            </Button>
-          )}
-
-          {tempTime !== DEFAULT_NOTIFICATION_TIME && (
+          {scheduledTime !== DEFAULT_NOTIFICATION_TIME && (
             <Button
               size="small"
               onClick={() => handleConfirmTime(DEFAULT_NOTIFICATION_TIME)}

@@ -246,15 +246,20 @@ export function setWorkerUrl(url: string): void {
 /**
  * 向瀏覽器 PushManager 取得或註冊 Web Push 憑證 (PushSubscription)
  */
-export async function getOrRegisterPushSubscription(): Promise<PushSubscription | null> {
-  if (!isNotificationSupported()) return null;
+export async function getOrRegisterPushSubscription(): Promise<{ sub: PushSubscription | null; error?: string }> {
+  if (!isNotificationSupported()) {
+    return { sub: null, error: '此瀏覽器不支援 Notification 或 ServiceWorker' };
+  }
   const perm = await requestNotificationPermission();
-  if (perm !== 'granted') return null;
+  if (perm !== 'granted') {
+    return { sub: null, error: `通知權限狀態為: ${perm} (未被允許)` };
+  }
 
   try {
     let reg: ServiceWorkerRegistration | undefined = await navigator.serviceWorker.getRegistration();
     if (!reg) {
-      reg = await navigator.serviceWorker.register('/sw.js');
+      const swUrl = import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/+$/, '')}/sw.js` : './sw.js';
+      reg = await navigator.serviceWorker.register(swUrl);
     }
     await navigator.serviceWorker.ready;
 
@@ -263,13 +268,13 @@ export async function getOrRegisterPushSubscription(): Promise<PushSubscription 
       const convertedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: convertedKey as unknown as ArrayBuffer,
+        applicationServerKey: convertedKey as unknown as BufferSource,
       });
     }
-    return sub;
-  } catch (err) {
+    return { sub };
+  } catch (err: any) {
     console.warn('[NotificationService] getOrRegisterPushSubscription error:', err);
-    return null;
+    return { sub: null, error: err?.message || String(err) };
   }
 }
 
@@ -287,9 +292,9 @@ export async function syncSubscriptionToWorker(params: {
   }
 
   try {
-    const sub = await getOrRegisterPushSubscription();
+    const { sub, error } = await getOrRegisterPushSubscription();
     if (!sub) {
-      return { ok: false, message: '無法取得瀏覽器 PushSubscription，請確認已允許通知權限' };
+      return { ok: false, message: `無法取得 PushSubscription: ${error || '請確認已允許通知權限'}` };
     }
 
     const res = await fetch(`${workerUrl}/api/subscribe`, {
@@ -325,9 +330,9 @@ export async function triggerWorkerTestPush(): Promise<{ ok: boolean; message: s
   }
 
   try {
-    const sub = await getOrRegisterPushSubscription();
+    const { sub, error } = await getOrRegisterPushSubscription();
     if (!sub) {
-      return { ok: false, message: '未取得 PushSubscription' };
+      return { ok: false, message: `未取得 PushSubscription: ${error || '請允許通知權限'}` };
     }
 
     const res = await fetch(`${workerUrl}/api/test-push`, {

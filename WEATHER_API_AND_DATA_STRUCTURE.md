@@ -348,3 +348,149 @@ export interface HudMetricItem {
   * **Page 1 首頁看板**：即時生活指南膠囊晶片（Pill Badge），展示於最後更新時間下方，文字完整不被圓形儀表擠壓。
   * **Page 2 趨勢頁**：全版 Bento Card 深度生活指南（包含早晚溫差、紫外線指數、戶外運動適宜度）。
 
+---
+
+## 肆、Cloudflare Worker 晨間推播、KV 零清單 (Zero-List) 排程與後端架構
+
+本專案配置有獨立的 Cloudflare Worker 服務（`cloudflare-worker/`），專責處理 **Web Push 系統級喚醒通知**，支援手機在完全關閉瀏覽器與鎖定螢幕下，準時接收自訂時間的晨間天氣快報。
+
+### 1. Cloudflare KV 額度瓶頸與「零清單 (Zero-List)」優化
+
+#### (1) Cloudflare KV 免費方案配額對照
+* **Read (`get`)**：**100,000 次 / 天**（充裕）
+* **List (`list`)**：**1,000 次 / 天**（極其嚴格 ⚠️）
+* **Write (`put`)**：**1,000 次 / 天**
+* **Delete (`delete`)**：**1,000 次 / 天**
+
+#### (2) 原始高頻排程陷阱
+* 排程設定為每分鐘喚醒一次檢查推播（`crons = ["* * * * *"]`，一天共 **1,440 分鐘**）。
+* 若排程每分鐘呼叫 `env.WEATHER_SUBS.list({ prefix: 'sub:' })`：
+  $$\text{每日清單次數} = 1\text{次/分} \times 60\text{分} \times 24\text{小時} = 1,440\text{ 次} > 1,000\text{ 次上限}$$
+* **結果**：即使用戶數為 0，每天亦固定在下午超標爆額。
+
+#### (3) 「零清單 (Zero-List)」索引調度設計
+系統全面改寫為 **索引時刻表模式 (`sub_index`)**：
+1. **集中式輕量索引 (`sub_index`)**：
+   在 KV 中維護單一索引鍵，僅記錄各訂閱者的 ID 與預約時段：
+   ```json
+   [
+     { "id": "9x7a2f", "time": "06:30" },
+     { "id": "3b1k8c", "time": "07:15" }
+   ]
+   ```
+2. **排程無損檢索 (Zero-List Cron)**：
+   * Worker 每分鐘喚醒時，僅呼叫一次 `await env.WEATHER_SUBS.get('sub_index')`（**走 Read 額度，List 消耗為 0**）。
+   * 每天固定產生 **1,440 次 Read**，僅佔 10 萬次上限的 **1.44%**。
+   * 在記憶體內比對當前台北時間（如 `07:15`）：
+     * 若本分鐘無符合之使用者 $\rightarrow$ **立即結束，不產生任何後續讀寫**。
+     * 若有符合之使用者 $\rightarrow$ 僅針對目標用戶讀取 `sub:${id}` 詳細推播金鑰並執行發送。
+   * 發送完成後寫入當前日期的時段標記 `lastNotifiedDate: "YYYY-MM-DD_HH:mm"`，防止重試震盪。
+
+---
+
+### 2. IP 流量防刷與安全限流 (Rate Limiting)
+
+為避免公開 API 遭受惡意連點、暴力腳本或前端迴圈攻擊而耗盡 KV 寫入額度或外部推播閘道，Worker 內建依 IP 限流機制（以 `cf-connecting-ip` 判定）：
+
+| API 端點 | 請求方式 | 速率限制 (Rate Limit) | 說明與防護目的 |
+| :--- | :---: | :--- | :--- |
+| `/api/subscribe` | POST | 10 次 / 分鐘 / IP | 防止狂刷訂閱建立大量無效 KV 鍵值 |
+| `/api/unsubscribe` | POST | 10 次 / 分鐘 / IP | 限制取消訂閱呼叫頻率 |
+| `/api/test-push` | POST | 5 次 / 分鐘 / IP | 防止頻繁呼叫 Apple APNs / Google FCM 伺服器 |
+| `/api/subscribers-count` | GET | 無限制（走 Read） | 供管理員快速查看訂閱總人數與時段清單 |
+| `/api/cron-check` | GET | 無限制（走 Read） | 供手動觸發排程診斷，不消耗 List |
+| `/api/sync-index` | POST | 管理員手動維護 | 將現存所有 `sub:*` 重建回 `sub_index`（備援工具） |
+
+---
+
+### 3. Worker 端四維氣象推播與 Steadman 體感演算法
+
+推播發送前，Worker 會向中央氣象署抓取即時預報，並套用與前端 **100% 相同** 的 Steadman 體感演算法：
+
+#### (1) Steadman 體感溫度計算公式
+```ts
+// 室外綜合體感 (納入風速與相對濕度)
+function calculateSteadmanApparentTemp(T: number, RH: number, V: number): number {
+  const clampedRH = Math.max(0, Math.min(100, RH));
+  const clampedV = Math.max(0, V);
+  const e = (clampedRH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
+  const at = 1.04 * T + 0.2 * e - 0.65 * clampedV - 2.7;
+  return Math.round(at * 10) / 10;
+}
+
+// 室內 / 弱風遮蔽體感 (V = 0)
+function calculateIndoorApparentTemp(T: number, RH: number): number {
+  const clampedRH = Math.max(0, Math.min(100, RH));
+  const e = (clampedRH / 100) * 6.105 * Math.exp((17.27 * T) / (237.7 + T));
+  const at = 1.04 * T + 0.2 * e - 2.7;
+  return Math.round(at * 10) / 10;
+}
+```
+
+#### (2) 推播生活建議決策階梯
+* **穿衣推薦**：$\ge 30^\circ\text{C}$（清涼透氣）/ $\ge 25^\circ\text{C}$（短袖輕裝）/ $\ge 20^\circ\text{C}$（薄款外套）/ $\ge 15^\circ\text{C}$（保暖衣物）/ $< 15^\circ\text{C}$（厚實防寒）。
+* **雨具指引**：若降雨現象包含「雨」或「雷」，或降雨機率 $\ge 40\%$，標註「🌧 務必攜傘」；$\ge 10\%$ 標註「☂️ 建議備折疊傘」；否則標註「☀️ 無需攜傘」。
+
+---
+
+### 4. Worker 資料結構規範 (Worker Data Schemas)
+
+#### (1) 訂閱索引項目 (`SubscriberIndexItem`)
+```ts
+export interface SubscriberIndexItem {
+  id: string;        // 雜湊後的訂閱端點 ID
+  time: string;      // 預定推播時間 "HH:mm" (例如 "06:30")
+}
+```
+
+#### (2) 使用者推播訂閱憑證 (`UserSubscriptionRecord`)
+```ts
+export interface UserSubscriptionRecord {
+  id: string;                         // 識別碼
+  subscription: {
+    endpoint: string;                 // Apple APNs / Google FCM 伺服器端點
+    keys: {
+      p256dh: string;                 // 用戶端公開金鑰
+      auth: string;                   // 共享密鑰
+    };
+  };
+  time: string;                       // 推播設定時間 "HH:mm"
+  cityName: string;                   // 訂閱縣市 (例如 "臺北市")
+  townshipName: string;               // 訂閱鄉鎮區 (例如 "中正區")
+  updatedAt: string;                  // 最後更新時間戳 (ISO)
+  lastNotifiedDate?: string;          // 防止同一時段重複推播標記 (例如 "2026-10-13_06:30")
+}
+```
+
+---
+
+## 伍、推播排程與「零清單 (Zero-List)」決策流程圖
+
+```mermaid
+flowchart TD
+    CronTick([Cloudflare Cron 喚醒: 每一分鐘]) --> ReadIndex[讀取 KV: get 'sub_index']
+    ReadIndex --> CheckEmpty{索引是否為空?}
+    CheckEmpty -- 是 (無訂閱者) --> Sleep([結束本分鐘執行])
+    
+    CheckEmpty -- 否 --> FilterTime{過濾 time == 當前台北分鐘?}
+    FilterTime -- 無符合使用者 --> Sleep
+    
+    FilterTime -- 有符合使用者 (N 位) --> ForEachUser[逐一處理符合之使用者]
+    ForEachUser --> GetUserRecord[讀取 KV: get 'sub:id']
+    GetUserRecord --> CheckDuplicate{今日該時段是否已推播過?}
+    CheckDuplicate -- 是 (已送達) --> SkipUser[略過]
+    
+    CheckDuplicate -- 否 --> FetchCWA[調用 CWA F-D0047-091 即時預報]
+    FetchCWA --> CalcSteadman[計算 Steadman 體感、穿搭與雨具指引]
+    CalcSteadman --> BuildPayload[組裝 Web Push Payload: title & body]
+    BuildPayload --> SendPush[呼叫 Apple/Google Push 伺服器]
+    
+    SendPush -- 成功送達 --> MarkNotified[更新 lastNotifiedDate 並寫入 KV]
+    SendPush -- 失敗/失效 --> LogWarn[記錄錯誤日誌]
+    MarkNotified --> NextUser{還有下一位?}
+    SkipUser --> NextUser
+    NextUser -- 是 --> ForEachUser
+    NextUser -- 否 --> Sleep
+```
+
+

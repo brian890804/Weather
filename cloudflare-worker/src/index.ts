@@ -50,6 +50,44 @@ function hashString(str: string): string {
   return Math.abs(hash).toString(36);
 }
 
+export interface SubscriberIndexItem {
+  id: string;
+  time: string; // "HH:mm" (例如 "06:30")
+}
+
+// ── 簡易 IP 限流機制 (防止惡意或迴圈刷 API) ──
+const ipRateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const current = ipRateLimits.get(ip);
+  if (!current || now > current.resetAt) {
+    ipRateLimits.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= limit) {
+    return false;
+  }
+  current.count++;
+  return true;
+}
+
+// ── 訂閱者索引輔助函式（使用 KV Read 讀取，完全不消耗每日僅 1000 次的 List 額度） ──
+async function getSubscriberIndex(env: Env): Promise<SubscriberIndexItem[]> {
+  try {
+    const raw = await env.WEATHER_SUBS.get('sub_index');
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('[KV] Failed to parse sub_index:', err);
+    return [];
+  }
+}
+
+async function saveSubscriberIndex(env: Env, index: SubscriberIndexItem[]): Promise<void> {
+  await env.WEATHER_SUBS.put('sub_index', JSON.stringify(index));
+}
+
 // ── 氣象署 Steadman 體感溫度計算公式（與前端系統完全一致） ──
 function calculateSteadmanApparentTemp(T: number, RH: number, V: number): number {
   const clampedRH = Math.max(0, Math.min(100, RH));
@@ -231,14 +269,19 @@ export default {
     }
 
     const url = new URL(request.url);
+    const clientIp = request.headers.get('cf-connecting-ip') || 'unknown';
 
     // 1. 取得 VAPID Public Key
     if (url.pathname === '/api/vapid-public-key' && request.method === 'GET') {
       return jsonResponse({ publicKey: env.VAPID_PUBLIC_KEY });
     }
 
-    // 2. 註冊 / 更新推播訂閱
+    // 2. 註冊 / 更新推播訂閱 (限制每分鐘同 IP 最多 10 次，防止濫用或迴圈狂刷)
     if (url.pathname === '/api/subscribe' && request.method === 'POST') {
+      if (!checkRateLimit(clientIp, 10, 60000)) {
+        return jsonResponse({ error: '請求過於頻繁，請稍後再試 (Too Many Requests)' }, 429);
+      }
+
       try {
         const body: any = await request.json();
         const { subscription, time, cityName, townshipName } = body;
@@ -248,16 +291,29 @@ export default {
         }
 
         const id = hashString(subscription.endpoint);
+        const userTime = time || '06:30';
         const record: UserSubscriptionRecord = {
           id,
           subscription,
-          time: time || '06:30',
+          time: userTime,
           cityName: cityName || '臺北市',
           townshipName: townshipName || '中正區',
           updatedAt: new Date().toISOString(),
         };
 
+        // 儲存使用者詳細資料
         await env.WEATHER_SUBS.put(`sub:${id}`, JSON.stringify(record));
+
+        // 維護索引清單 sub_index (避免後續排程使用 list() 消耗每日 1000 次配額)
+        const index = await getSubscriberIndex(env);
+        const existingIdx = index.findIndex((item) => item.id === id);
+        if (existingIdx >= 0) {
+          index[existingIdx].time = userTime;
+        } else {
+          index.push({ id, time: userTime });
+        }
+        await saveSubscriberIndex(env, index);
+
         return jsonResponse({ ok: true, id, message: '訂閱成功儲存' });
       } catch (err: any) {
         return jsonResponse({ error: err?.message || '訂閱失敗' }, 500);
@@ -266,11 +322,22 @@ export default {
 
     // 3. 取消訂閱
     if (url.pathname === '/api/unsubscribe' && request.method === 'POST') {
+      if (!checkRateLimit(clientIp, 10, 60000)) {
+        return jsonResponse({ error: '請求過於頻繁，請稍後再試 (Too Many Requests)' }, 429);
+      }
+
       try {
         const body: any = await request.json();
         if (body.endpoint) {
           const id = hashString(body.endpoint);
           await env.WEATHER_SUBS.delete(`sub:${id}`);
+
+          // 從索引清單中移除
+          const index = await getSubscriberIndex(env);
+          const newIndex = index.filter((item) => item.id !== id);
+          if (newIndex.length !== index.length) {
+            await saveSubscriberIndex(env, newIndex);
+          }
         }
         return jsonResponse({ ok: true, message: '已取消訂閱' });
       } catch (err: any) {
@@ -278,8 +345,12 @@ export default {
       }
     }
 
-    // 4. 即時發送測試推播 (驗證真實 Apple/Google Web Push 通道)
+    // 4. 即時發送測試推播 (限制同 IP 每分鐘最多 5 次測試，避免過度耗用推播閘道)
     if (url.pathname === '/api/test-push' && request.method === 'POST') {
+      if (!checkRateLimit(clientIp, 5, 60000)) {
+        return jsonResponse({ error: '測試推播發送過於頻繁，請等待 1 分鐘後再試' }, 429);
+      }
+
       try {
         const body: any = await request.json();
         const { subscription, payload: clientPayload, cityName, townshipName } = body;
@@ -316,7 +387,16 @@ export default {
       }
     }
 
-    // 5. 手動觸發 Cron 檢查與診斷 (供排查使用)
+    // 5. 查詢訂閱人數概況 (走 Read 額度，完全不消耗 List 額度)
+    if (url.pathname === '/api/subscribers-count' && request.method === 'GET') {
+      const index = await getSubscriberIndex(env);
+      return jsonResponse({
+        count: index.length,
+        subscribers: index.map((u) => ({ id: u.id, time: u.time })),
+      });
+    }
+
+    // 6. 手動觸發 Cron 檢查與診斷 (完全改用索引讀取，不呼叫 list())
     if (url.pathname === '/api/cron-check') {
       const logs: string[] = [];
       const d = new Date();
@@ -337,25 +417,47 @@ export default {
 
       logs.push(`Taipei Now: ${currentTimeStr} (${todayStr}), slot: ${currentSlotKey}`);
 
-      const list = await env.WEATHER_SUBS.list({ prefix: 'sub:' });
-      logs.push(`Found ${list.keys.length} subscriptions in KV`);
+      const index = await getSubscriberIndex(env);
+      logs.push(`Found ${index.length} subscriptions in sub_index`);
 
-      for (const item of list.keys) {
-        const raw = await env.WEATHER_SUBS.get(item.name);
-        if (!raw) continue;
+      for (const item of index) {
+        const raw = await env.WEATHER_SUBS.get(`sub:${item.id}`);
+        if (!raw) {
+          logs.push(`Item sub:${item.id}: not found in KV`);
+          continue;
+        }
         const rec = JSON.parse(raw);
         const match = rec.time === currentTimeStr;
         const already = rec.lastNotifiedDate === currentSlotKey;
-        logs.push(`Item ${item.name}: userTime=${rec.time}, match=${match}, alreadyNotified=${already}`);
+        logs.push(`Item sub:${item.id}: userTime=${rec.time}, match=${match}, alreadyNotified=${already}`);
       }
 
       return jsonResponse({ logs });
+    }
+
+    // 7. 手動重建索引 (僅供維護時手動執行，平時不會觸發)
+    if (url.pathname === '/api/sync-index' && request.method === 'POST') {
+      const list = await env.WEATHER_SUBS.list({ prefix: 'sub:' });
+      const newIndex: SubscriberIndexItem[] = [];
+      for (const key of list.keys) {
+        const raw = await env.WEATHER_SUBS.get(key.name);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            newIndex.push({ id: parsed.id, time: parsed.time || '06:30' });
+          } catch {}
+        }
+      }
+      await saveSubscriberIndex(env, newIndex);
+      return jsonResponse({ ok: true, syncedCount: newIndex.length });
     }
 
     return jsonResponse({ status: 'ok', worker: 'weather-push-worker' });
   },
 
   // ── 每一分鐘由 Cloudflare Cron Trigger 自動喚醒 ──
+  // 注意：此處已徹底移除 env.WEATHER_SUBS.list()，完全改用單次 get('sub_index')，
+  // 每天僅使用 1,440 次免費 Read 額度（佔 10 萬次上限的 1.4%），徹底解決每日 1000 筆上限問題！
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     const d = new Date();
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -375,16 +477,29 @@ export default {
 
     console.log(`[Cron] Running check at Taipei time ${currentTimeStr} (${todayStr})`);
 
-    // 列出所有使用者訂閱
-    const list = await env.WEATHER_SUBS.list({ prefix: 'sub:' });
-    for (const item of list.keys) {
-      const recordRaw = await env.WEATHER_SUBS.get(item.name);
+    // 1. 透過 Read 讀取索引（1 次 Read，0 次 List）
+    const index = await getSubscriberIndex(env);
+    if (!index || index.length === 0) {
+      return;
+    }
+
+    // 2. 快速比對：只篩選出「推播時間剛好符合當前這分鐘」的使用者
+    const activeSubscribers = index.filter((item) => item.time === currentTimeStr);
+    if (activeSubscribers.length === 0) {
+      // 本分鐘無任何使用者需要推播，立即結束，不進行多餘的 KV 讀寫
+      return;
+    }
+
+    console.log(`[Cron] Found ${activeSubscribers.length} subscribers scheduled for ${currentTimeStr}`);
+
+    for (const item of activeSubscribers) {
+      const recordRaw = await env.WEATHER_SUBS.get(`sub:${item.id}`);
       if (!recordRaw) continue;
 
       try {
         const record: UserSubscriptionRecord = JSON.parse(recordRaw);
-        // 核對當前分鐘是否與使用者設定時間相符，且該時段今日尚未發送過
-        if (record.time === currentTimeStr && record.lastNotifiedDate !== currentSlotKey) {
+        // 核對該時段今日尚未發送過
+        if (record.lastNotifiedDate !== currentSlotKey) {
           console.log(`[Cron] Fetching real-time weather and sending push to ${record.cityName} ${record.townshipName}`);
 
           const summary = await fetchWeatherSummary(record.cityName, record.townshipName, env.CWA_API_KEY);
@@ -400,15 +515,15 @@ export default {
 
           const pushRes = await sendWorkerPush(record.subscription, payload, env);
           if (pushRes.ok) {
-            console.log(`[Cron] Successfully delivered push to ${item.name}`);
+            console.log(`[Cron] Successfully delivered push to sub:${item.id}`);
             record.lastNotifiedDate = currentSlotKey;
-            await env.WEATHER_SUBS.put(item.name, JSON.stringify(record));
+            await env.WEATHER_SUBS.put(`sub:${item.id}`, JSON.stringify(record));
           } else {
-            console.warn(`[Cron] Push delivery failed for ${item.name}:`, pushRes.error);
+            console.warn(`[Cron] Push delivery failed for sub:${item.id}:`, pushRes.error);
           }
         }
       } catch (err) {
-        console.warn(`[Cron] Failed to process push for ${item.name}:`, err);
+        console.warn(`[Cron] Failed to process push for sub:${item.id}:`, err);
       }
     }
   },

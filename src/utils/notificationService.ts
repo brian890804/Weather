@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../types/weather';
 import { calculateIndoorApparentTemp, calculateSteadmanApparentTemp } from './weatherUtils';
 
@@ -295,6 +294,7 @@ export async function syncSubscriptionToWorker(params: {
   cityName: string;
   townshipName: string;
   scheduledTime: string;
+  stationName?: string;
 }): Promise<{ ok: boolean; message: string }> {
   const workerUrl = getWorkerUrl();
   if (!workerUrl) {
@@ -315,6 +315,7 @@ export async function syncSubscriptionToWorker(params: {
         time: params.scheduledTime,
         cityName: params.cityName,
         townshipName: params.townshipName,
+        stationName: params.stationName || '',
       }),
     });
 
@@ -330,6 +331,46 @@ export async function syncSubscriptionToWorker(params: {
   }
 }
 
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 當使用者切換地區 (縣市/鄉鎮/測站) 或 GPS 自動定位時，
+ * 若使用者已開啟推播訂閱，在背景無感自動更新所在地與測站至 Cloudflare Worker KV
+ */
+export function autoSyncLocationIfSubscribed(params: {
+  cityName: string;
+  townshipName: string;
+  stationName?: string;
+}): void {
+  // 僅在已訂閱、有 Worker 網址且具備通知權限時進行無感同步
+  if (!isNotificationSubscribed() || !getWorkerUrl()) {
+    return;
+  }
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+    return;
+  }
+
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+  }
+
+  // 1 秒防抖 (Debounce)，防止使用者連續切換選單或滑動時密集發送 API
+  autoSyncTimer = setTimeout(async () => {
+    try {
+      const scheduledTime = getNotificationTime();
+      await syncSubscriptionToWorker({
+        cityName: params.cityName,
+        townshipName: params.townshipName,
+        stationName: params.stationName,
+        scheduledTime,
+      });
+      console.log(`[NotificationService] Auto-synced location to Cloudflare KV: ${params.cityName} ${params.townshipName} (${params.stationName || '代表測站'})`);
+    } catch (err) {
+      console.warn('[NotificationService] Auto-sync location failed:', err);
+    }
+  }, 1000);
+}
+
 /**
  * 透過 Cloudflare Worker 發送立即測試推播 (真實 Apple/Google 系統級 Web Push)
  */
@@ -338,6 +379,7 @@ export async function triggerWorkerTestPush(customPayload?: {
   body?: string;
   cityName?: string;
   townshipName?: string;
+  stationName?: string;
 }): Promise<{ ok: boolean; message: string }> {
   const workerUrl = getWorkerUrl();
   if (!workerUrl) {
@@ -358,6 +400,7 @@ export async function triggerWorkerTestPush(customPayload?: {
         payload: customPayload ? { title: customPayload.title, body: customPayload.body } : undefined,
         cityName: customPayload?.cityName,
         townshipName: customPayload?.townshipName,
+        stationName: customPayload?.stationName,
       }),
     });
 
@@ -368,6 +411,7 @@ export async function triggerWorkerTestPush(customPayload?: {
 
     return { ok: true, message: '已透過 Cloudflare Worker 成功發送真實雲端 Web Push！' };
   } catch (err: any) {
+    console.warn('[NotificationService] triggerWorkerTestPush error:', err);
     return { ok: false, message: `連線錯誤: ${err?.message || err}` };
   }
 }

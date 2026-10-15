@@ -25,6 +25,7 @@ import {
 } from "../../utils/notificationService";
 import type { WeatherPeriod } from "../../types/weather";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
+import { useWeatherStore } from "../../store/weatherStore";
 
 interface NotificationSettingCardProps {
   cityName: string;
@@ -66,6 +67,16 @@ export default function NotificationSettingCard({
   const [testing, setTesting] = useState(false);
   const [syncingTime, setSyncingTime] = useState(false);
   const workerUrl = getWorkerUrl();
+
+  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
+  const realtimeWeather = useWeatherStore((s) => s.realtimeWeather);
+  const townshipStations = useWeatherStore((s) => s.townshipStations);
+  const townshipKey = `${cityName}_${townshipName}`;
+  const currentStation =
+    userSelectedStations[townshipKey] ||
+    realtimeWeather[townshipKey]?.stationName ||
+    townshipStations[townshipKey]?.[0]?.stationName ||
+    "";
 
   const handleConfirmTime = async (targetTime?: string) => {
     const newTime = targetTime || tempTime;
@@ -109,6 +120,7 @@ export default function NotificationSettingCard({
       syncSubscriptionToWorker({
         cityName,
         townshipName,
+        stationName: currentStation,
         scheduledTime: newTime,
       })
         .then((res) => {
@@ -151,6 +163,7 @@ export default function NotificationSettingCard({
           syncSubscriptionToWorker({
             cityName,
             townshipName,
+            stationName: currentStation,
             scheduledTime,
           }).then((res) => {
             onShowMessage?.(res.message);
@@ -204,6 +217,7 @@ export default function NotificationSettingCard({
           body: content.body,
           cityName,
           townshipName,
+          stationName: currentStation,
         });
         if (res.ok) {
           onShowMessage?.(

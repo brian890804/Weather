@@ -20,6 +20,7 @@ export interface UserSubscriptionRecord {
   time: string; // "HH:mm" (例如 "06:30")
   cityName: string;
   townshipName: string;
+  stationName?: string;
   updatedAt: string;
   lastNotifiedDate?: string;
 }
@@ -132,22 +133,160 @@ function getUmbrellaRecommendation(pop: number, wx: string): string {
   }
 }
 
+const CITY_DATASET_MAP: Record<string, string> = {
+  '基隆市': 'F-D0047-049',
+  '臺北市': 'F-D0047-061',
+  '新北市': 'F-D0047-069',
+  '桃園市': 'F-D0047-005',
+  '新竹市': 'F-D0047-053',
+  '新竹縣': 'F-D0047-009',
+  '苗栗縣': 'F-D0047-013',
+  '臺中市': 'F-D0047-073',
+  '彰化縣': 'F-D0047-017',
+  '南投縣': 'F-D0047-021',
+  '雲林縣': 'F-D0047-025',
+  '嘉義市': 'F-D0047-057',
+  '嘉義縣': 'F-D0047-029',
+  '臺南市': 'F-D0047-077',
+  '高雄市': 'F-D0047-065',
+  '屏東縣': 'F-D0047-033',
+  '宜蘭縣': 'F-D0047-001',
+  '花蓮縣': 'F-D0047-041',
+  '臺東縣': 'F-D0047-037',
+  '澎湖縣': 'F-D0047-045',
+  '金門縣': 'F-D0047-085',
+  '連江縣（馬祖）': 'F-D0047-081',
+  '連江縣': 'F-D0047-081',
+};
+
 async function fetchWeatherSummary(
   cityName: string,
   townshipName: string,
+  stationName?: string,
   apiKey?: string
 ): Promise<{ title: string; body: string }> {
   const key = apiKey || 'CWA-AD03D85A-1599-454E-A5F6-DA8F0C1E2EDA';
   const cleanCity = (cityName || '臺北市').trim();
   const cleanTownship = (townshipName || '').trim();
+  const cleanStation = (stationName || '').trim();
   const normCity = cleanCity
     .replace(/^台北/, '臺北')
     .replace(/^台中/, '臺中')
     .replace(/^台南/, '臺南')
     .replace(/^台東/, '臺東');
 
+  // 計算台北當前日期字串 (YYYY-MM-DD)
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const dateMap = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const todayStr = `${dateMap.year}-${dateMap.month}-${dateMap.day}`;
+
+  const datasetId = CITY_DATASET_MAP[normCity];
+
+  // 1. 優先嘗試查詢該縣市鄉鎮 3 天逐 3 小時精準預報 (F-D0047-0xx)
+  if (datasetId && cleanTownship) {
+    try {
+      const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${datasetId}?Authorization=${key}&LocationName=${encodeURIComponent(cleanTownship)}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data: any = await res.json();
+        const loc = data.records?.Locations?.[0]?.Location?.[0];
+        if (loc) {
+          const popEl = loc.WeatherElement?.find((e: any) => e.ElementName === '3小時降雨機率');
+          const tempEl = loc.WeatherElement?.find((e: any) => e.ElementName === '溫度');
+          const wxEl = loc.WeatherElement?.find((e: any) => e.ElementName === '天氣現象');
+          const humEl = loc.WeatherElement?.find((e: any) => e.ElementName === '相對濕度');
+          const windEl = loc.WeatherElement?.find((e: any) => e.ElementName === '風速');
+
+          // 計算今日最大降雨機率 (Max 3-hour PoP，與手機端 100% 一致)
+          const todayPops = (popEl?.Time || [])
+            .filter((t: any) => (t.StartTime || t.DataTime || '').startsWith(todayStr))
+            .map((t: any) => parseInt(t.ElementValue?.[0]?.ProbabilityOfPrecipitation, 10))
+            .filter((v: number) => !isNaN(v));
+          const pop = todayPops.length > 0
+            ? Math.max(...todayPops)
+            : parseInt(popEl?.Time?.[0]?.ElementValue?.[0]?.ProbabilityOfPrecipitation || '0', 10);
+
+          // 計算今日氣溫區間
+          const todayTemps = (tempEl?.Time || [])
+            .filter((t: any) => (t.StartTime || t.DataTime || '').startsWith(todayStr))
+            .map((t: any) => parseFloat(t.ElementValue?.[0]?.Temperature))
+            .filter((v: number) => !isNaN(v));
+          const minT = todayTemps.length > 0 ? Math.min(...todayTemps) : 22;
+          const maxT = todayTemps.length > 0 ? Math.max(...todayTemps) : 28;
+
+          let currentT = parseFloat(tempEl?.Time?.[0]?.ElementValue?.[0]?.Temperature || '25');
+          let RH = parseFloat(humEl?.Time?.[0]?.ElementValue?.[0]?.RelativeHumidity || '65');
+          let V = parseFloat(windEl?.Time?.[0]?.ElementValue?.[0]?.WindSpeed || '2');
+          let wx = wxEl?.Time?.[0]?.ElementValue?.[0]?.Weather || '多雲';
+          let realtimeRainNow = 0;
+          let isRealtimeRaining = false;
+
+          // 2. 若有指定測站，加碼查詢全台測站即測資料 (O-A0001-001)
+          if (cleanStation) {
+            try {
+              const stUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${key}&StationName=${encodeURIComponent(cleanStation)}`;
+              const stRes = await fetch(stUrl);
+              if (stRes.ok) {
+                const stData: any = await stRes.json();
+                const st = stData.records?.Station?.[0];
+                if (st) {
+                  const airTemp = parseFloat(st.WeatherElement?.AirTemperature);
+                  if (!isNaN(airTemp) && airTemp > -50) {
+                    currentT = Math.round(airTemp * 10) / 10;
+                  }
+                  const rain = parseFloat(st.WeatherElement?.Now?.Precipitation);
+                  if (!isNaN(rain) && rain >= 0) {
+                    realtimeRainNow = rain;
+                    if (rain > 0) isRealtimeRaining = true;
+                  }
+                  const stHum = parseFloat(st.WeatherElement?.RelativeHumidity);
+                  if (!isNaN(stHum) && stHum >= 0) RH = stHum;
+                  const stWind = parseFloat(st.WeatherElement?.WindSpeed);
+                  if (!isNaN(stWind) && stWind >= 0) V = stWind;
+                  const stWeather = st.WeatherElement?.Weather;
+                  if (stWeather && stWeather !== '-99' && stWeather !== 'None') {
+                    wx = stWeather.trim();
+                    if (wx.includes('雨')) isRealtimeRaining = true;
+                  }
+                }
+              }
+            } catch (stErr) {
+              console.warn('[CWA O-A0001-001] Station fetch failed:', stErr);
+            }
+          }
+
+          const outdoorAT = calculateSteadmanApparentTemp(currentT, RH, V);
+          const indoorAT = calculateIndoorApparentTemp(currentT, RH);
+          const clothing = getClothingRecommendation(outdoorAT);
+          let umbrella = getUmbrellaRecommendation(pop, wx);
+          if (isRealtimeRaining) {
+            umbrella = realtimeRainNow > 0
+              ? `🌧 現場有雨 (${realtimeRainNow}mm) · 務必帶傘`
+              : '🌧 現場測站有雨 · 務必帶傘';
+          }
+
+          const stationTag = cleanStation ? ` (${cleanStation}測站)` : '';
+          const currentTStr = typeof currentT === 'number' ? (Number.isInteger(currentT) ? `${currentT}` : currentT.toFixed(1)) : currentT;
+
+          return {
+            title: `🌅 ${cleanCity}${cleanTownship}${stationTag} 晨間氣象快報`,
+            body: `🌡️ 當前氣溫 ${currentTStr}°C · 今日 ${minT}°C ~ ${maxT}°C\n🏠 室內體感 ${indoorAT}°C · 🌲 室外體感 ${outdoorAT}°C\n💧 降雨率 ${pop}% · ${wx} (${umbrella})\n👔 穿搭：${clothing}`,
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[CWA ${datasetId}] Township fetch failed, falling back to F-D0047-091:`, err);
+    }
+  }
+
+  // 備援方案 A：全台逐 12 小時預報 (F-D0047-091)
   try {
-    // 優先查詢氣象署各縣市鄉鎮 3 天精準預報 (F-D0047-091)
     const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization=${key}&LocationName=${encodeURIComponent(normCity)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`F-D0047-091 HTTP ${res.status}`);
@@ -189,7 +328,7 @@ async function fetchWeatherSummary(
   } catch (err: any) {
     console.warn('[CWA F-D0047-091] fallback to F-C0032-001:', err);
     try {
-      // 備援方案：36 小時預報 (F-C0032-001)
+      // 備援方案 B：36 小時預報 (F-C0032-001)
       const url2 = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${key}&locationName=${encodeURIComponent(normCity)}`;
       const res2 = await fetch(url2);
       const data2: any = await res2.json();
@@ -263,7 +402,7 @@ async function sendWorkerPush(
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
@@ -276,29 +415,39 @@ export default {
       return jsonResponse({ publicKey: env.VAPID_PUBLIC_KEY });
     }
 
-    // 2. 註冊 / 更新推播訂閱 (限制每分鐘同 IP 最多 10 次，防止濫用或迴圈狂刷)
+    // 2. 註冊 / 更新推播訂閱 (限制每分鐘同 IP 最多 60 次，支援地點切換時自動無感同步)
     if (url.pathname === '/api/subscribe' && request.method === 'POST') {
-      if (!checkRateLimit(clientIp, 10, 60000)) {
+      if (!checkRateLimit(clientIp, 60, 60000)) {
         return jsonResponse({ error: '請求過於頻繁，請稍後再試 (Too Many Requests)' }, 429);
       }
 
       try {
         const body: any = await request.json();
-        const { subscription, time, cityName, townshipName } = body;
+        const { subscription, time, cityName, townshipName, stationName } = body;
 
         if (!subscription || !subscription.endpoint || !subscription.keys) {
           return jsonResponse({ error: '無效的 PushSubscription' }, 400);
         }
 
         const id = hashString(subscription.endpoint);
-        const userTime = time || '06:30';
+
+        // 讀取既有紀錄（若已有設定時間，允許地點更新時保留原排程時間）
+        let existingRecord: UserSubscriptionRecord | null = null;
+        try {
+          const rawExisting = await env.WEATHER_SUBS.get(`sub:${id}`);
+          if (rawExisting) existingRecord = JSON.parse(rawExisting);
+        } catch {}
+
+        const userTime = time || existingRecord?.time || '06:30';
         const record: UserSubscriptionRecord = {
           id,
           subscription,
           time: userTime,
-          cityName: cityName || '臺北市',
-          townshipName: townshipName || '中正區',
+          cityName: cityName || existingRecord?.cityName || '臺北市',
+          townshipName: townshipName || existingRecord?.townshipName || '中正區',
+          stationName: stationName !== undefined ? stationName : (existingRecord?.stationName || ''),
           updatedAt: new Date().toISOString(),
+          lastNotifiedDate: existingRecord?.lastNotifiedDate,
         };
 
         // 儲存使用者詳細資料
@@ -314,7 +463,7 @@ export default {
         }
         await saveSubscriberIndex(env, index);
 
-        return jsonResponse({ ok: true, id, message: '訂閱成功儲存' });
+        return jsonResponse({ ok: true, id, message: '訂閱與地點已成功更新至雲端 KV' });
       } catch (err: any) {
         return jsonResponse({ error: err?.message || '訂閱失敗' }, 500);
       }
@@ -353,7 +502,7 @@ export default {
 
       try {
         const body: any = await request.json();
-        const { subscription, payload: clientPayload, cityName, townshipName } = body;
+        const { subscription, payload: clientPayload, cityName, townshipName, stationName } = body;
         if (!subscription || !subscription.endpoint) {
           return jsonResponse({ error: '缺少 subscription' }, 400);
         }
@@ -362,7 +511,12 @@ export default {
         let bodyText = clientPayload?.body;
 
         if (!title || !bodyText) {
-          const summary = await fetchWeatherSummary(cityName || '臺北市', townshipName || '', env.CWA_API_KEY);
+          const summary = await fetchWeatherSummary(
+            cityName || '臺北市',
+            townshipName || '',
+            stationName || '',
+            env.CWA_API_KEY
+          );
           title = title || summary.title;
           bodyText = bodyText || summary.body;
         }
@@ -458,7 +612,7 @@ export default {
   // ── 每一分鐘由 Cloudflare Cron Trigger 自動喚醒 ──
   // 注意：此處已徹底移除 env.WEATHER_SUBS.list()，完全改用單次 get('sub_index')，
   // 每天僅使用 1,440 次免費 Read 額度（佔 10 萬次上限的 1.4%），徹底解決每日 1000 筆上限問題！
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     const d = new Date();
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Taipei',
@@ -502,7 +656,12 @@ export default {
         if (record.lastNotifiedDate !== currentSlotKey) {
           console.log(`[Cron] Fetching real-time weather and sending push to ${record.cityName} ${record.townshipName}`);
 
-          const summary = await fetchWeatherSummary(record.cityName, record.townshipName, env.CWA_API_KEY);
+          const summary = await fetchWeatherSummary(
+            record.cityName,
+            record.townshipName,
+            record.stationName,
+            env.CWA_API_KEY
+          );
 
           const payload = {
             title: `${summary.title} (${record.time})`,

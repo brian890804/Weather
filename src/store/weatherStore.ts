@@ -1,11 +1,32 @@
 import { create } from 'zustand';
 import type { ParsedCityData, WeeklyForecastDay } from '../types/weather';
+import { autoSyncLocationIfSubscribed } from '../utils/notificationService';
 
 export type TabCategory = 'overview' | 'temperature' | 'wind' | 'rain' | 'comfort';
 
 const CITY_KEY = 'weather_selected_city';
 const TOWNSHIP_KEY = 'weather_selected_township';
 const AUTO_LOCATION_KEY = 'weather_is_auto_location';
+
+function triggerAutoSync(
+  cityName: string,
+  townshipName: string,
+  state: WeatherState,
+  manualStation?: string
+) {
+  if (!cityName || !townshipName) return;
+  const key = `${cityName}_${townshipName}`;
+  const stationName =
+    manualStation ||
+    state.userSelectedStations[key] ||
+    state.realtimeWeather[key]?.stationName ||
+    state.townshipStations[key]?.[0]?.stationName;
+  autoSyncLocationIfSubscribed({
+    cityName,
+    townshipName,
+    stationName,
+  });
+}
 
 function loadSavedCity(): string {
   try {
@@ -147,6 +168,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       } catch {}
       return { userSelectedStations: updated };
     });
+    const currentCity = get().selectedCity;
+    const currentTownship = get().selectedTownship;
+    triggerAutoSync(currentCity, currentTownship, get(), stationName);
   },
   cities: [],
   setCities: (data) => {
@@ -172,6 +196,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       selectedCity: newCityName,
       selectedTownship: newTownshipName,
     });
+    triggerAutoSync(newCityName, newTownshipName, get());
   },
 
   isAutoLocation: loadSavedAutoLocation(),
@@ -202,6 +227,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       selectedPeriodTime: null,
       isAutoLocation: false,
     });
+    triggerAutoSync(cityName, newTownship, get());
   },
 
   selectedTownship: loadSavedTownship(),
@@ -213,6 +239,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       selectedPeriodTime: null,
       isAutoLocation: false,
     });
+    triggerAutoSync(get().selectedCity, townshipName, get());
   },
 
   setSelectedCityAndTownship: (cityName: string, townshipName: string, isAuto = false) => {
@@ -225,6 +252,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       selectedPeriodTime: null,
       isAutoLocation: isAuto,
     });
+    triggerAutoSync(cityName, townshipName, get());
   },
 
   selectedPeriodTime: null,

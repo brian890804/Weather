@@ -394,7 +394,7 @@ export interface HudMetricItem {
 
 | API 端點 | 請求方式 | 速率限制 (Rate Limit) | 說明與防護目的 |
 | :--- | :---: | :--- | :--- |
-| `/api/subscribe` | POST | 10 次 / 分鐘 / IP | 防止狂刷訂閱建立大量無效 KV 鍵值 |
+| `/api/subscribe` | POST | 60 次 / 分鐘 / IP | 支援切換地區或 GPS 定位時自動無感同步，同時防狂刷 |
 | `/api/unsubscribe` | POST | 10 次 / 分鐘 / IP | 限制取消訂閱呼叫頻率 |
 | `/api/test-push` | POST | 5 次 / 分鐘 / IP | 防止頻繁呼叫 Apple APNs / Google FCM 伺服器 |
 | `/api/subscribers-count` | GET | 無限制（走 Read） | 供管理員快速查看訂閱總人數與時段清單 |
@@ -403,13 +403,40 @@ export interface HudMetricItem {
 
 ---
 
-### 3. Worker 端四維氣象推播與 Steadman 體感演算法
+### 3. 使用者切換地區／GPS 定位「自動無感同步 (Auto-Sync)」機制
 
-推播發送前，Worker 會向中央氣象署抓取即時預報，並套用與前端 **100% 相同** 的 Steadman 體感演算法：
+為徹底解決「使用者在前端切換鄉鎮或使用 GPS 定位後，雲端推播卻依然停留在舊地點」的痛點，系統實作了全自動無感同步：
 
-#### (1) Steadman 體感溫度計算公式
+1. **觸發時機**：
+   * **GPS 定位偵測**：初次開啟 App 靜默定位或點擊「定位目前位置」成功時。
+   * **手動切換行政區**：在選單或搜尋切換縣市（`setSelectedCity`）或鄉鎮市區（`setSelectedTownship`）。
+   * **手動指定觀測站**：在站點清單中切換特定自動氣象站（`setUserSelectedStation`）。
+2. **防抖機制 (1 秒 Debounce)**：
+   * 在 `src/utils/notificationService.ts` 的 `autoSyncLocationIfSubscribed()` 中設定 1 秒防抖計時器。
+   * 使用者在下拉選單連續滑動挑選地區時，不頻繁發送請求，停止滑動 1 秒後才向 Worker 發送背景更新，完全不耗損網路與 KV 配額。
+3. **無感更新**：
+   * 只要使用者曾開啟推播（`isNotificationSubscribed() === true`），上述變更均於背景自動靜默同步至 Cloudflare KV，使用者無需再次打開推播卡片點擊「確認時間」。
+
+---
+
+### 4. Worker 端精準雙軌氣象推播與 Steadman 體感演算法
+
+推播發送前，Worker 會根據用戶儲存的「縣市、鄉鎮、測站」，向中央氣象署抓取精準預報，完全杜絕全縣市粗粒度造成的數值落差：
+
+#### (1) 雙軌精準氣象對齊制度
+1. **軌道一：鄉鎮 3 天逐 3 小時預報 (`F-D0047-001` ～ `F-D0047-085`)**
+   * 依縣市代碼對應專屬資料集，帶入 `LocationName=${townshipName}` 取得該鄉鎮專屬的 3 小時預報。
+   * 降雨機率取**今日所有 3 小時預報時段的最大值 (`Max 3-hour PoP`)**，與手機端介面完全 100% 同步一致（解決 12 小時機率 20% vs 手機 10% 的差異問題）。
+2. **軌道二：自動氣象站即測現況 (`O-A0001-001`)**
+   * 若用戶有指定測站（`stationName`），帶入 `StationName=${encodeURIComponent(stationName)}` 即時拉取真實測站數值。
+   * 當前氣溫精確保留小數點 1 位（如 `26.3°C`），並回傳現場即測雨量（`rainNow`）與實測風速風向。
+3. **雙層降級保護 (Graceful Fallback)**：
+   * 若單一鄉鎮查詢失敗 $\rightarrow$ 自動降級為全台逐 12 小時預報 (`F-D0047-091`)。
+   * 若 F-D0047-091 亦失敗 $\rightarrow$ 自動降級為 36 小時預報 (`F-C0032-001`)。
+
+#### (2) Steadman 體感溫度計算公式
 ```ts
-// 室外綜合體感 (納入風速與相對濕度)
+// 室外綜合體感 (納入實測風速與相對濕度)
 function calculateSteadmanApparentTemp(T: number, RH: number, V: number): number {
   const clampedRH = Math.max(0, Math.min(100, RH));
   const clampedV = Math.max(0, V);
@@ -427,13 +454,13 @@ function calculateIndoorApparentTemp(T: number, RH: number): number {
 }
 ```
 
-#### (2) 推播生活建議決策階梯
+#### (3) 推播生活建議決策階梯
 * **穿衣推薦**：$\ge 30^\circ\text{C}$（清涼透氣）/ $\ge 25^\circ\text{C}$（短袖輕裝）/ $\ge 20^\circ\text{C}$（薄款外套）/ $\ge 15^\circ\text{C}$（保暖衣物）/ $< 15^\circ\text{C}$（厚實防寒）。
-* **雨具指引**：若降雨現象包含「雨」或「雷」，或降雨機率 $\ge 40\%$，標註「🌧 務必攜傘」；$\ge 10\%$ 標註「☂️ 建議備折疊傘」；否則標註「☀️ 無需攜傘」。
+* **雨具指引**：若現場測站雨量 $> 0$，標註「🌧 現場有雨 (Xmm) · 務必帶傘」；若預報降雨現象包含「雨」或「雷」，或降雨機率 $\ge 40\%$，標註「🌧 務必攜傘」；$\ge 10\%$ 標註「☂️ 建議備折疊傘」；否則標註「☀️ 無需攜傘」。
 
 ---
 
-### 4. Worker 資料結構規範 (Worker Data Schemas)
+### 5. Worker 資料結構規範 (Worker Data Schemas)
 
 #### (1) 訂閱索引項目 (`SubscriberIndexItem`)
 ```ts
@@ -457,8 +484,9 @@ export interface UserSubscriptionRecord {
   time: string;                       // 推播設定時間 "HH:mm"
   cityName: string;                   // 訂閱縣市 (例如 "臺北市")
   townshipName: string;               // 訂閱鄉鎮區 (例如 "中正區")
+  stationName?: string;               // 訂閱特定測站 (例如 "臺北")
   updatedAt: string;                  // 最後更新時間戳 (ISO)
-  lastNotifiedDate?: string;          // 防止同一時段重複推播標記 (例如 "2026-10-13_06:30")
+  lastNotifiedDate?: string;          // 防止同一時段重複推播標記 (例如 "2026-10-15_06:30")
 }
 ```
 
@@ -480,8 +508,12 @@ flowchart TD
     GetUserRecord --> CheckDuplicate{今日該時段是否已推播過?}
     CheckDuplicate -- 是 (已送達) --> SkipUser[略過]
     
-    CheckDuplicate -- 否 --> FetchCWA[調用 CWA F-D0047-091 即時預報]
-    FetchCWA --> CalcSteadman[計算 Steadman 體感、穿搭與雨具指引]
+    CheckDuplicate -- 否 --> CheckPrecise{是否有鄉鎮與測站資訊?}
+    CheckPrecise -- 是 --> FetchPrecise[調用 F-D0047-0xx 鄉鎮 3 小時預報 + O-A0001-001 測站即測]
+    CheckPrecise -- 否 (或失敗) --> FetchFallback[降級調用 F-D0047-091 全台預報]
+    
+    FetchPrecise --> CalcSteadman[計算 Steadman 體感、穿搭與現場雨具指引]
+    FetchFallback --> CalcSteadman
     CalcSteadman --> BuildPayload[組裝 Web Push Payload: title & body]
     BuildPayload --> SendPush[呼叫 Apple/Google Push 伺服器]
     

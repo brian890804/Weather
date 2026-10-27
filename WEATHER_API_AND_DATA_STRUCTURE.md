@@ -33,7 +33,7 @@ $$\Delta t = \text{NextWindowStart} - \text{CurrentTime}$$
 為了防止使用者頻繁刷新頁面或切換元件導致 API 額度超載，系統結合了 **`localStorage` 本地壓縮儲存** 與 **SWR 資料請求快取**：
 
 1. **檢查快取有效性 (`isCacheValid`)**：
-   * 檢查本地鍵值 `weather_cities_cache_v2`。
+   * 檢查本地鍵值 `weather_cities_cache_v3`。
    * 比對快取資料中的 `fetchedAt`（抓取時間戳記）：
      * **條件一（絕對保鮮）**：$\text{CurrentTime} - \text{fetchedAt} < 3\text{ 小時}$ $\rightarrow$ 直接判定有效。
      * **條件二（視窗對齊）**：$\text{WindowStart} \le \text{fetchedAt} < \text{WindowEnd}$ $\rightarrow$ 判定有效。
@@ -99,7 +99,7 @@ $$\Delta t = \text{NextWindowStart} - \text{CurrentTime}$$
 
 ```mermaid
 flowchart TD
-    Start([使用者造訪 / 開啟頁面]) --> ReadStorage[讀取 localStorage: weather_cities_cache_v2]
+    Start([使用者造訪 / 開啟頁面]) --> ReadStorage[讀取 localStorage: weather_cities_cache_v3]
     ReadStorage --> CheckValid{isCacheValid ?<br/>未滿3小時 或 在當前6hr視窗內?}
     
     CheckValid -- 是 (快取有效) --> LoadCache[直接載入快取至 Zustand Store]

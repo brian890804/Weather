@@ -1,3 +1,5 @@
+import { twTime } from './time';
+
 /** 根據 WeatherCode (氣象局代碼) 或天氣描述，對應 meteocons SVG 名稱 */
 export function getWeatherIconName(
   weatherCode?: string,
@@ -7,42 +9,49 @@ export function getWeatherIconName(
   const suffix = isNight ? '-night' : '-day';
 
   const code = (weatherCode || '00').padStart(2, '0');
-  // 氣象局天氣代碼: https://opendata.cwa.gov.tw/opendatadoc/MFC/D0047.pdf
+  // 氣象署「預報產品天氣描述代碼表」: https://opendata.cwa.gov.tw/opendatadoc/MFC/ForecastElement.pdf
   const codeMap: Record<string, string> = {
-    '01': 'clear' + suffix,          // 晴
-    '02': 'mostly-clear' + suffix,   // 晴時多雲
-    '03': 'partly-cloudy' + suffix,  // 多雲時晴
-    '04': 'overcast' + suffix,       // 多雲
-    '05': 'overcast' + suffix,       // 多雲短暫陰
-    '06': 'overcast' + suffix,       // 陰
-    '07': 'overcast' + suffix,       // 陰時多雲
-    '08': 'overcast' + suffix + '-rain',     // 多雲短暫陣雨
-    '09': 'overcast' + suffix + '-rain',     // 多雲陣雨
-    '10': 'overcast-day-rain',       // 多雲短暫雨
-    '11': 'overcast-day-rain',       // 多雲雨
-    '12': 'overcast-day-rain',       // 陰短暫雨
-    '13': 'overcast-rain',           // 陰雨
-    '14': 'thunderstorms' + suffix,  // 多雲雷陣雨
-    '15': 'thunderstorms' + suffix,  // 多雲短暫雷陣雨
-    '16': 'thunderstorms' + suffix,  // 陰短暫雷陣雨
-    '17': 'thunderstorms',           // 陰雷陣雨
-    '18': 'overcast-day-snow',       // 多雲陣雪
-    '19': 'overcast-day-snow',       // 多雲雪
-    '20': 'overcast-snow',           // 陰雪
-    '21': 'overcast-day-sleet',      // 多雲陣雨夾雪
-    '22': 'overcast-sleet',          // 陰雨夾雪
-    '23': 'fog' + suffix,            // 霧
-    '24': 'haze' + suffix,           // 靄
-    '25': 'haze',                    // 霾
-    '26': 'fog' + suffix,            // 地霧
-    '27': 'mostly-clear' + suffix,   // 晴有霾
-    '28': 'partly-cloudy' + suffix,  // 多雲有霾
-    '29': 'thunderstorms-extreme' + suffix, // 多雲局部雷陣雨
-    '30': 'thunderstorms' + suffix,  // 多雲大雷雨
-    '31': 'thunderstorms',           // 陰大雷雨
-    '32': 'rain',                    // 豪雨
-    '33': 'rain',                    // 大雨
-    '34': 'snow',                    // 雪
+    '01': 'clear' + suffix,                 // 晴天
+    '02': 'mostly-clear' + suffix,          // 晴時多雲
+    '03': 'partly-cloudy' + suffix,         // 多雲時晴
+    '04': 'overcast' + suffix,              // 多雲
+    '05': 'overcast' + suffix,              // 多雲時陰
+    '06': 'overcast' + suffix,              // 陰時多雲
+    '07': 'overcast' + suffix,              // 陰天
+    '08': 'overcast' + suffix + '-rain',    // 多雲短暫雨 / 午後短暫陣雨 / 短暫雨
+    '09': 'overcast' + suffix + '-rain',    // 多雲時陰短暫雨
+    '10': 'overcast' + suffix + '-rain',    // 陰時多雲短暫雨
+    '11': 'overcast' + suffix + '-rain',    // 雨天 / 陰短暫雨
+    '12': 'overcast' + suffix + '-rain',    // 多雲時陰有雨
+    '13': 'overcast' + suffix + '-rain',    // 陰時多雲有雨
+    '14': 'overcast-rain',                  // 陰有雨 / 陣雨
+    '15': 'thunderstorms' + suffix + '-rain', // 多雲陣雨或雷雨
+    '16': 'thunderstorms' + suffix + '-rain', // 多雲時陰陣雨或雷雨
+    '17': 'thunderstorms-rain',             // 陰時多雲有雷陣雨
+    '18': 'thunderstorms-rain',             // 陰有陣雨或雷雨
+    '19': 'partly-cloudy' + suffix + '-rain', // 晴午後多雲局部雨
+    '20': 'overcast' + suffix + '-rain',    // 多雲午後局部雨
+    '21': 'thunderstorms' + suffix + '-rain', // 晴午後多雲局部雷雨
+    '22': 'thunderstorms' + suffix + '-rain', // 多雲午後局部雷雨
+    '23': 'overcast-sleet',                 // 多雲局部陣雨或雪
+    '24': 'fog' + suffix,                   // 晴有霧
+    '25': 'fog' + suffix,                   // 晴時多雲有霧
+    '26': 'fog' + suffix,                   // 多雲時晴有霧
+    '27': 'overcast' + suffix + '-fog',     // 多雲有霧
+    '28': 'overcast-fog',                   // 陰有霧
+    '29': 'overcast' + suffix + '-rain',    // 多雲局部雨
+    '30': 'overcast' + suffix + '-rain',    // 多雲時陰局部雨
+    '31': 'overcast' + suffix + '-rain',    // 多雲有霧有局部雨
+    '32': 'overcast-rain',                  // 多雲時陰有霧有局部雨
+    '33': 'thunderstorms' + suffix + '-rain', // 多雲局部陣雨或雷雨
+    '34': 'thunderstorms-rain',             // 多雲時陰局部陣雨或雷雨
+    '35': 'thunderstorms' + suffix + '-rain', // 多雲有陣雨或雷雨有霧
+    '36': 'thunderstorms-rain',             // 多雲時陰有陣雨或雷雨有霧
+    '37': 'overcast-sleet',                 // 多雲局部雨或雪有霧
+    '38': 'overcast' + suffix + '-drizzle', // 短暫陣雨有霧
+    '39': 'overcast-rain',                  // 有雨有霧
+    '41': 'thunderstorms' + suffix + '-rain', // 短暫陣雨或雷雨有霧
+    '42': 'snow',                           // 下雪 / 積冰 / 暴風雪
   };
 
   // 先檢查天氣文字是否明確帶有「雨」或「雷」
@@ -53,7 +62,8 @@ export function getWeatherIconName(
   if (w.includes('雪')) return 'snow';
   if (w.includes('雨夾雪') || w.includes('夾雪')) return 'sleet';
   if (w.includes('大雨') || w.includes('豪雨')) return 'rain';
-  if (w.includes('毛毛雨') || w.includes('細雨') || w.includes('有靄')) return isNight ? 'overcast-night-drizzle' : 'overcast-day-drizzle';
+  // 註：「靄」是低能見度的水氣，不是降水，交由下方霧 / 霾判斷
+  if (w.includes('毛毛雨') || w.includes('細雨')) return isNight ? 'overcast-night-drizzle' : 'overcast-day-drizzle';
   if (w.includes('陣雨') || w.includes('短暫雨') || w.includes('有雨')) {
     if (w.includes('晴') || w.includes('多雲時晴')) return isNight ? 'partly-cloudy-night-rain' : 'partly-cloudy-day-rain';
     return isNight ? 'overcast-night-rain' : 'overcast-day-rain';
@@ -84,19 +94,16 @@ export function getWeatherIconUrl(iconName: string): string {
   ).href;
 }
 
-/** 判斷目前是否為白天 (06:00 ~ 18:00) */
+/** 判斷是否為夜間 (台北時間 18:00 ~ 06:00)；未給時間則以現在判斷 */
 export function isCurrentNight(startTime?: string): boolean {
-  if (!startTime) {
-    const h = new Date().getHours();
-    return h < 6 || h >= 18;
-  }
-  const h = new Date(startTime).getHours();
+  const h = twTime(startTime).hour();
   return h < 6 || h >= 18;
 }
 
 /** 風力等級中文 */
 export function beaufortLabel(scale?: string): string {
-  if (!scale || scale === '-') return '微風';
+  // 缺資料時不捏造風級名稱
+  if (!scale || scale === '-') return '--';
   const map: Record<string, string> = {
     '0': '無風',
     '1': '軟風',

@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import { twTime } from '../../utils/time';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import LinearProgress from '@mui/material/LinearProgress';
@@ -32,13 +33,13 @@ export default function RainPanel({
   onSelectPeriod,
   autoCurrentPeriodStartTime,
 }: RainPanelProps) {
-  const popPeriods = periods.filter(
-    (p) => p.probabilityOfPrecipitation !== '-'
-  );
-  const maxPop = popPeriods.reduce(
-    (m, p) => Math.max(m, parseInt(p.probabilityOfPrecipitation) || 0),
-    0
-  );
+  // 「未來」最高降雨機率：只統計尚未結束的時段；全無資料時顯示 "--" 而非 0%
+  const now = twTime();
+  const futurePops = periods
+    .filter((p) => twTime(p.endTime).isAfter(now))
+    .map((p) => parseInt(p.probabilityOfPrecipitation))
+    .filter((v) => !isNaN(v));
+  const maxPop: number | null = futurePops.length > 0 ? Math.max(...futurePops) : null;
 
   return (
     <Box>
@@ -123,16 +124,16 @@ export default function RainPanel({
         }}
       >
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-          未來預報最高降雨機率：<strong style={{ color: popColor(String(maxPop)) }}>{maxPop}%</strong>
+          未來預報最高降雨機率：<strong style={{ color: popColor(String(maxPop ?? '-')) }}>{maxPop !== null ? `${maxPop}%` : '--'}</strong>
         </Typography>
         <LinearProgress
           variant="determinate"
-          value={maxPop}
+          value={maxPop ?? 0}
           sx={{
             height: 8,
             borderRadius: 4,
             bgcolor: 'rgba(255,255,255,0.08)',
-            '& .MuiLinearProgress-bar': { bgcolor: popColor(String(maxPop)), borderRadius: 4 },
+            '& .MuiLinearProgress-bar': { bgcolor: popColor(String(maxPop ?? '-')), borderRadius: 4 },
           }}
         />
       </Box>

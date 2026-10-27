@@ -3,11 +3,11 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
 import { tempColor, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
-import { useWeatherStore } from '../../store/weatherStore';
+import { useActiveStation } from '../../hooks/useActiveStation';
+import { computeLiveConditions, isPeriodNow } from '../../utils/liveConditions';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
 
@@ -34,17 +34,12 @@ export default function TemperaturePanel({
   onSelectPeriod,
   autoCurrentPeriodStartTime,
 }: TemperaturePanelProps) {
-  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const selectedCity = useWeatherStore((s) => s.selectedCity);
-  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
-  const now = dayjs();
-  const isCurrent = currentPeriod
-    ? currentPeriod.startTime === autoCurrentPeriodStartTime ||
-      (now.isAfter(dayjs(currentPeriod.startTime)) && now.isBefore(dayjs(currentPeriod.endTime)))
-    : false;
-  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
-  const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : currentPeriod?.temperature;
+  // 實測值只套用在涵蓋現在的時段，並與總覽共用同一個（可手動切換的）測站
+  const { station, isCityFallback } = useActiveStation();
+  const live = currentPeriod
+    ? computeLiveConditions(currentPeriod, station, { isNow: isPeriodNow(currentPeriod), isCityFallback })
+    : null;
+  const displayTemp = live?.temperature;
 
   return (
     <Box>
@@ -100,20 +95,20 @@ export default function TemperaturePanel({
               {displayTemp}°C
             </Typography>
             <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {isCurrent && realtimeTemp ? '即測站點真實現況' : '氣溫狀況'}
+              {live?.temperatureObserved ? `即測站：${live.stationName}` : '時段起點預報氣溫'}
             </Typography>
           </Box>
           <Stack spacing={0.5}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <ArrowUpwardIcon sx={{ fontSize: 18, color: '#EF5350' }} />
-              <Typography>最高 <strong>{currentPeriod.maxTemperature}°C</strong></Typography>
+              <Typography>時段預報最高 <strong>{currentPeriod.maxTemperature}°C</strong></Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 體感 {currentPeriod.maxApparentTemperature}°C
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <ArrowDownwardIcon sx={{ fontSize: 18, color: '#42A5F5' }} />
-              <Typography>最低 <strong>{currentPeriod.minTemperature}°C</strong></Typography>
+              <Typography>時段預報最低 <strong>{currentPeriod.minTemperature}°C</strong></Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 體感 {currentPeriod.minApparentTemperature}°C
               </Typography>

@@ -1,5 +1,6 @@
-import type { WeatherPeriod } from '../types/weather';
-import { calculateIndoorApparentTemp, calculateSteadmanApparentTemp } from './weatherUtils';
+import { twTime } from './time';
+import type { RealtimeStationWeather, WeatherPeriod } from '../types/weather';
+import { computeLiveConditions, isPeriodNow } from './liveConditions';
 
 export interface WeatherNotificationContent {
   title: string;
@@ -12,81 +13,96 @@ export interface WeatherNotificationContent {
   umbrellaTip: string;
 }
 
+/** 數值格式與 Worker 一致：整數不帶小數，其餘保留 1 位 */
+function fmt(v: number): string {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+/**
+ * 組出晨間推播內容。算法與 Cloudflare Worker 的正式排程推播 (fetchWeatherSummary) 一致：
+ * - 當前氣溫 / 體感：涵蓋現在的時段 + 新鮮的測站實測（缺項退回預報）
+ * - 今日區間：今日所有逐時預報溫度的最低 ~ 最高
+ * - 降雨率：今日各 3 小時降雨機率的最大值
+ * - 「現場有雨」只來自測站天氣現象；資料不足的項目顯示 "--"，不填預設值
+ */
 export function buildMorningNotificationContent(
   cityName: string,
   townshipName: string,
-  todayPeriod: WeatherPeriod | null,
-  realtimeTemp?: string,
-  realtimeHumidity?: string,
-  realtimeWindSpeed?: string,
-  realtimeRainNow?: number
+  periods: WeatherPeriod[],
+  station: RealtimeStationWeather | null
 ): WeatherNotificationContent {
-  // 1. 氣溫與當天高低溫
-  const tempNum = realtimeTemp ? parseFloat(realtimeTemp) : todayPeriod ? parseFloat(todayPeriod.temperature) : 25;
-  const tempStr = !isNaN(tempNum) ? `${Math.round(tempNum)}°C` : (todayPeriod?.temperature ? `${todayPeriod.temperature}°C` : '--°C');
-  const maxTempStr = todayPeriod?.maxTemperature ? `${todayPeriod.maxTemperature}°C` : (!isNaN(tempNum) ? `${Math.round(tempNum) + 2}°C` : '--°C');
-  const minTempStr = todayPeriod?.minTemperature ? `${todayPeriod.minTemperature}°C` : (!isNaN(tempNum) ? `${Math.round(tempNum) - 2}°C` : '--°C');
+  const now = twTime();
+  const todayStr = now.format('YYYY-MM-DD');
+  const nowPeriod = periods.find((p) => isPeriodNow(p, now)) ?? null;
+  const todayPeriods = periods.filter((p) => twTime(p.startTime).format('YYYY-MM-DD') === todayStr);
+
+  const live = nowPeriod ? computeLiveConditions(nowPeriod, station, { isNow: true }) : null;
+
+  // 1. 氣溫與今日高低溫
+  const tempNum = parseFloat(live?.temperature ?? '');
+  const tempStr = !isNaN(tempNum) ? `${fmt(tempNum)}°C` : '--°C';
+  const his = todayPeriods.map((p) => parseFloat(p.maxTemperature)).filter((v) => !isNaN(v));
+  const los = todayPeriods.map((p) => parseFloat(p.minTemperature)).filter((v) => !isNaN(v));
+  const rangeStr = his.length > 0 && los.length > 0 ? `${Math.min(...los)}°C ~ ${Math.max(...his)}°C` : '--';
 
   // 2. 體感溫度 (室外 vs 室內)
-  const rhNum = parseFloat(realtimeHumidity || todayPeriod?.relativeHumidity || '65') || 65;
-  const windNum = parseFloat(realtimeWindSpeed || todayPeriod?.windSpeed || '2') || 2;
-
-  let outdoorAppTemp = 25;
-  let indoorAppTemp = 25;
-
-  if (!isNaN(tempNum)) {
-    outdoorAppTemp = Math.round(Number(calculateSteadmanApparentTemp(tempNum, rhNum, windNum)));
-    indoorAppTemp = Math.round(Number(calculateIndoorApparentTemp(tempNum, rhNum)));
-  } else if (todayPeriod?.maxApparentTemperature) {
-    outdoorAppTemp = Math.round(parseFloat(todayPeriod.maxApparentTemperature));
-    indoorAppTemp = outdoorAppTemp;
-  }
+  const outdoorNum = parseFloat(live?.outdoorApparent ?? '');
+  const indoorNum = parseFloat(live?.indoorApparent ?? '');
+  const outdoorStr = !isNaN(outdoorNum) ? `${fmt(outdoorNum)}°C` : '--°C';
+  const indoorStr = !isNaN(indoorNum) ? `${fmt(indoorNum)}°C` : '--°C';
 
   // 3. 降雨機率與帶傘建議
-  const popVal = todayPeriod?.probabilityOfPrecipitation && todayPeriod.probabilityOfPrecipitation !== '-'
-    ? parseInt(todayPeriod.probabilityOfPrecipitation, 10)
-    : 0;
-  const isRainingNow = (realtimeRainNow && realtimeRainNow > 0) || (todayPeriod?.weather && (todayPeriod.weather.includes('雨') || todayPeriod.weather.includes('陣雨')));
-
-  let umbrellaTip = '無需攜傘';
-  if (isRainingNow || popVal >= 40) {
-    umbrellaTip = isRainingNow ? '現場有雨 · 務必帶傘' : '降雨機率高 · 務必帶傘';
-  } else if (popVal >= 10) {
-    umbrellaTip = '局部短暫雨 · 建議備折疊傘';
+  const pops = todayPeriods.map((p) => parseInt(p.probabilityOfPrecipitation, 10)).filter((v) => !isNaN(v));
+  const popVal = pops.length > 0 ? Math.max(...pops) : null;
+  const wx = live?.weather ?? '';
+  let umbrellaTip = '☀️ 無需攜傘';
+  if (live?.isRainingObserved) {
+    umbrellaTip = '🌧 現場有雨 · 務必帶傘';
+  } else if (wx.includes('雨') || wx.includes('雷') || (popVal !== null && popVal >= 40)) {
+    umbrellaTip = '🌧 預報有雨 · 務必攜傘';
+  } else if (popVal !== null && popVal >= 10) {
+    umbrellaTip = '☂️ 局部短暫雨 · 建議備折疊傘';
+  } else if (popVal === null) {
+    umbrellaTip = '暫無降雨機率資料';
   }
 
-  // 4. 穿衣建議
-  let clothTitle = '短袖輕裝';
-  let clothDetail = '舒適短袖，天氣宜人';
-  if (outdoorAppTemp >= 30) {
+  // 4. 穿衣建議（依室外體感；無體感時退回氣溫）
+  const clothBasis = !isNaN(outdoorNum) ? outdoorNum : tempNum;
+  let clothTitle = '--';
+  let clothDetail = '暫無溫度資料';
+  if (isNaN(clothBasis)) {
+    // 保持無資料狀態
+  } else if (clothBasis >= 30) {
     clothTitle = '清涼透氣';
-    clothDetail = '純棉短袖，注意防曬補水';
-  } else if (outdoorAppTemp >= 25) {
+    clothDetail = '短袖為宜，注意防曬補水';
+  } else if (clothBasis >= 25) {
     clothTitle = '短袖輕裝';
-    clothDetail = '舒適短袖或通風衣物';
-  } else if (outdoorAppTemp >= 20) {
+    clothDetail = '短袖衣物，通風舒適';
+  } else if (clothBasis >= 20) {
     clothTitle = '薄款外套';
-    clothDetail = '長袖搭配薄夾克或罩衫';
-  } else if (outdoorAppTemp >= 15) {
-    clothTitle = '保暖毛衣';
-    clothDetail = '厚上衣與防風外套';
+    clothDetail = '薄外套或薄長袖';
+  } else if (clothBasis >= 15) {
+    clothTitle = '保暖衣物';
+    clothDetail = '長袖毛衣或風衣保暖';
   } else {
-    clothTitle = '防寒大衣';
-    clothDetail = '羽絨保暖外套，慎防受寒';
+    clothTitle = '厚實防寒';
+    clothDetail = '羽絨厚外套，注意防寒';
   }
 
   const customTime = getNotificationTime();
-  const title = `🌅 ${cityName}${townshipName} 晨間氣象快報 (${customTime})`;
-  const wxDesc = todayPeriod?.weather ? ` · ${todayPeriod.weather}` : '';
-  const body = `🌡️ 當前氣溫 ${tempStr} · 今日 ${minTempStr} ~ ${maxTempStr}\n🏠 室內體感 ${indoorAppTemp}°C · 🌲 室外體感 ${outdoorAppTemp}°C\n💧 降雨率 ${popVal}%${wxDesc} (${umbrellaTip})\n👔 穿搭：${clothTitle}（${clothDetail}）`;
+  const stationTag = live?.stationName ? ` (${live.stationName}測站)` : '';
+  const title = `🌅 ${cityName}${townshipName}${stationTag} 晨間氣象快報 (${customTime})`;
+  const wxDesc = wx ? ` · ${wx}` : '';
+  const popStr = popVal !== null ? `${popVal}%` : '--';
+  const body = `🌡️ 當前氣溫 ${tempStr} · 今日 ${rangeStr}\n🏠 室內體感 ${indoorStr} · 🌲 室外體感 ${outdoorStr}\n💧 降雨率 ${popStr}${wxDesc} (${umbrellaTip})\n👔 穿搭：${clothTitle}（${clothDetail}）`;
 
   return {
     title,
     body,
     temperature: tempStr,
-    apparentTempOutdoor: `${outdoorAppTemp}°C`,
-    apparentTempIndoor: `${indoorAppTemp}°C`,
-    pop: `${popVal}%`,
+    apparentTempOutdoor: outdoorStr,
+    apparentTempIndoor: indoorStr,
+    pop: popStr,
     clothingTip: `${clothTitle} (${clothDetail})`,
     umbrellaTip,
   };

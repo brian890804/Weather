@@ -17,13 +17,12 @@ import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import dayjs from 'dayjs';
-import 'dayjs/locale/zh-tw';
+import { twTime } from '../utils/time';
 
 import { useWeatherStore, type TabCategory } from '../store/weatherStore';
 import { useWeatherData } from '../hooks/useWeatherData';
 import { CITIES } from '../utils/cities';
-import PeriodCard from '../components/desktop/PeriodCard';
+import PeriodCard from '../components/PeriodCard/PeriodCard';
 import DragScrollBox from '../components/common/DragScrollBox';
 import OverviewPanel from '../components/desktop/OverviewPanel';
 import TemperaturePanel from '../components/desktop/TemperaturePanel';
@@ -47,14 +46,8 @@ import MobileWeather from '../mobile/MobileWeather';
 import NotificationSettingCard from '../components/common/NotificationSettingCard';
 import IOSLocationModal from '../components/ios/IOSLocationModal';
 import { getCurrentPosition, findNearestTownship } from '../utils/geolocation';
-import {
-  readCache,
-  isRateLimited,
-  getMinutesSinceFetched,
-  MANUAL_REFRESH_MIN_INTERVAL_MINUTES,
-} from '../utils/cache';
+import { isRateLimited } from '../utils/cache';
 
-dayjs.locale('zh-tw');
 
 const TAB_CONFIG: { value: TabCategory; label: string }[] = [
   { value: 'overview', label: '📊 總覽' },
@@ -65,7 +58,7 @@ const TAB_CONFIG: { value: TabCategory; label: string }[] = [
 ];
 
 export default function WeatherPage() {
-  const { isLoading, error, refetch, refetchRealtime } = useWeatherData();
+  const { isLoading, error, refetch } = useWeatherData();
   const {
     cities,
     selectedCity,
@@ -79,9 +72,6 @@ export default function WeatherPage() {
     lastFetchedAt,
     selectedPeriodTime,
     setSelectedPeriodTime,
-    realtimeTemps,
-    realtimeWeather,
-    realtimeWinds,
   } = useWeatherStore();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -181,18 +171,18 @@ export default function WeatherPage() {
   );
 
   // 3. 判斷自動預設當前時段（以現在時間為基準；若找不到涵蓋當前的時段，找最接近現在的未過期時段）
-  const [currentTime, setCurrentTime] = useState(() => dayjs());
+  const [currentTime, setCurrentTime] = useState(() => twTime());
 
   const autoCurrentPeriod = useMemo(() => {
     if (!periods.length) return null;
     const match = periods.find((p) => {
-      const st = dayjs(p.startTime);
-      const et = dayjs(p.endTime);
+      const st = twTime(p.startTime);
+      const et = twTime(p.endTime);
       return !currentTime.isBefore(st) && currentTime.isBefore(et);
     });
     if (match) return match;
     // 若當前時間跨度找不到（例如剛好在交界），找離現在最近的未來時段
-    const upcoming = periods.find((p) => dayjs(p.endTime).isAfter(currentTime));
+    const upcoming = periods.find((p) => twTime(p.endTime).isAfter(currentTime));
     return upcoming ?? periods[0];
   }, [periods, currentTime]);
 
@@ -207,7 +197,7 @@ export default function WeatherPage() {
   // 當前系統時間狀態（每 30 秒自動偵測一次，確保時間跨過 3hr 區間時能及時觸發切換）
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(dayjs());
+      setCurrentTime(twTime());
     }, 30000);
     return () => clearInterval(timer);
   }, []);
@@ -225,16 +215,18 @@ export default function WeatherPage() {
   // 智慧時段巡檢：
   // 1. 若使用者選了「過去時段」（endTime <= currentTime），停留超過 45 秒後自動幫他校正切回「現在時間」
   // 2. 若使用者選的是「未來時段」（startTime > currentTime），永久鎖定保留使用者的選擇，絕不自動關閉
+  // 注意：effect 不可依賴每 30 秒更新的 currentTime，否則 45 秒計時器每 30 秒就被重設、永遠不會觸發
+  const isSelectedPeriodPast = useMemo(() => {
+    if (!selectedPeriodTime) return false;
+    const selected = periods.find((p) => p.startTime === selectedPeriodTime);
+    if (!selected) return false;
+    return !twTime(selected.endTime).isAfter(currentTime);
+  }, [selectedPeriodTime, periods, currentTime]);
+
   useEffect(() => {
     if (!selectedPeriodTime) return;
 
-    // 檢查選中的時段是否為「過去時段」
-    const selected = periods.find((p) => p.startTime === selectedPeriodTime);
-    if (!selected) return;
-
-    const isPast = dayjs(selected.endTime).isBefore(currentTime) || dayjs(selected.endTime).isSame(currentTime);
-
-    if (isPast) {
+    if (isSelectedPeriodPast) {
       // 45 秒後自動歸位回現在時間，避免使用者忘記切換而看著歷史舊資訊
       const timer = setTimeout(() => {
         setSelectedPeriodTime(null);
@@ -242,7 +234,7 @@ export default function WeatherPage() {
       return () => clearTimeout(timer);
     }
     // 未來時段：不設定超時，永久維持選取
-  }, [selectedPeriodTime, periods, currentTime, setSelectedPeriodTime]);
+  }, [selectedPeriodTime, isSelectedPeriodPast, setSelectedPeriodTime]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing || cooldown > 0) return;
@@ -271,7 +263,7 @@ export default function WeatherPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [refetch, refetchRealtime, refreshing, cooldown]);
+  }, [refetch, refreshing, cooldown]);
 
   const handleSaveApiKey = useCallback(() => {
     try {
@@ -460,7 +452,8 @@ export default function WeatherPage() {
               {/* 更新時間 Chip */}
               {lastFetchedAt && !isMobile && (
                 <Chip
-                  label={`資料時間 ${dayjs(lastFetchedAt).format('HH:mm')}`}
+                  // 氣象署 API 未提供發布時間，此為本機向氣象署抓取預報的時間
+                  label={`預報抓取 ${twTime(lastFetchedAt).format('M/D HH:mm')}`}
                   size="small"
                   variant="outlined"
                   sx={{
@@ -711,8 +704,8 @@ export default function WeatherPage() {
                   variant="body1"
                   sx={{ color: 'text.secondary', mt: 0.5, ml: { sm: 5.5, xs: 5 }, fontSize: { xs: 14, sm: 16 }, fontWeight: 500 }}
                 >
-                  {dayjs(displayPeriod.startTime).format('YYYY年M月D日 HH:mm')} –{' '}
-                  {dayjs(displayPeriod.endTime).format('HH:mm')} 預報（逐 3 小時）
+                  {twTime(displayPeriod.startTime).format('YYYY年M月D日 HH:mm')} –{' '}
+                  {twTime(displayPeriod.endTime).format('HH:mm')} 預報（逐 3 小時）
                 </Typography>
               </Box>
             )}
@@ -753,7 +746,7 @@ export default function WeatherPage() {
                   <NotificationSettingCard
                     cityName={selectedCity}
                     townshipName={currentTownshipData?.townshipName || ''}
-                    currentPeriod={displayPeriod}
+                    periods={periods}
                     onShowMessage={(msg) => setSnackbarMsg(msg)}
                   />
                 </Box>

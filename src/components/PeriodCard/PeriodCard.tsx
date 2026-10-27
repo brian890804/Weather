@@ -15,8 +15,7 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAlt';
 import SentimentVeryDissatisfiedIcon from '@mui/icons-material/SentimentVeryDissatisfied';
 import SentimentNeutralIcon from '@mui/icons-material/SentimentNeutral';
-import dayjs from 'dayjs';
-import 'dayjs/locale/zh-tw';
+import { twTime } from '../../utils/time';
 import WeatherIcon from '../WeatherIcon/WeatherIcon';
 import type { WeatherPeriod } from '../../types/weather';
 import {
@@ -26,13 +25,13 @@ import {
   beaufortLabel,
   bftColor,
   comfortColor,
-  calculateSteadmanApparentTemp,
 } from '../../utils/weatherUtils';
 import { R } from '../../App';
+import { useActiveStation } from '../../hooks/useActiveStation';
 import { useWeatherStore } from '../../store/weatherStore';
+import { computeLiveConditions, isPeriodNow } from '../../utils/liveConditions';
 import React from 'react';
 
-dayjs.locale('zh-tw');
 
 export type PeriodCardCategory = 'overview' | 'temperature' | 'wind' | 'rain' | 'comfort';
 
@@ -57,37 +56,30 @@ function PeriodCardBase({
   onSelect,
   category = 'overview',
 }: PeriodCardProps) {
-  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
+  // 實測值只套用在涵蓋現在的時段，並與總覽共用同一個（可手動切換的）測站
+  const { station, isCityFallback } = useActiveStation();
   const selectedCity = useWeatherStore((s) => s.selectedCity);
-  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
-  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-  const realtimeTemp = (townshipKey && realtimeTemps[townshipKey]) ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity];
-  const realtimeWind = (townshipKey && realtimeWinds[townshipKey]) ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity];
-  const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
-  const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : period.windSpeed;
-  const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : period.windDirection;
-  const displayBeaufortScale = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : period.beaufortScale;
+  const weeklyDays = useWeatherStore((s) => s.weeklyForecasts[selectedCity]);
+  const live = computeLiveConditions(period, station, { isNow: isPeriodNow(period), isCityFallback });
+  const displayTemp = live.temperature;
+  const displayHumidity = live.humidity;
+  const displayWindSpeed = live.windSpeed;
+  const displayWindDirection = live.windDirection;
+  const displayBeaufortScale = live.beaufortScale;
+  const displayApparentTemp = live.outdoorApparent;
 
-  let displayApparentTemp = period.maxApparentTemperature;
-  if (isCurrent && realtimeTemp) {
-    const curTempNum = parseFloat(realtimeTemp);
-    const curRhNum = parseFloat(period.relativeHumidity) || 65;
-    const curWindNum = realtimeWind ? parseFloat(realtimeWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
-    if (!isNaN(curTempNum)) {
-      displayApparentTemp = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
-    }
-  }
-
-  const start = dayjs(period.startTime);
-  const end = dayjs(period.endTime);
+  const start = twTime(period.startTime);
+  const end = twTime(period.endTime);
   const isNightPeriod = start.hour() >= 18 || start.hour() < 6;
   const dayLabel = start.format('M/D (dd)');
   const timeLabel = `${start.format('HH:mm')} – ${end.format('HH:mm')}`;
 
   const pop = period.probabilityOfPrecipitation;
-  const uvIdx = period.uvIndex;
-  const comfortDesc = period.maxComfortIndexDescription || '舒適';
+  // 逐 3 小時預報沒有紫外線；改用一週預報 (F-D0047-091) 的「當日白天」紫外線指數
+  const dayUv = weeklyDays?.find((d) => d.dateStr === start.format('YYYY-MM-DD'));
+  const uvIdx = dayUv?.uvIndex !== undefined ? String(dayUv.uvIndex) : '-';
+  const uvLevel = dayUv?.uvLevel;
+  const comfortDesc = period.maxComfortIndexDescription || '-';
   const cColor = comfortColor(comfortDesc);
   const bColor = bftColor(displayBeaufortScale);
 
@@ -183,7 +175,7 @@ function PeriodCardBase({
                 textAlign: 'center',
               }}
             >
-              {period.weather}
+              {live.weather}
             </Typography>
           </Box>
 
@@ -227,7 +219,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>濕度</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 14.5, sm: 16 } }}>
-                  {period.relativeHumidity}%
+                  {displayHumidity}%
                 </Typography>
               </Stack>
             </Stack>
@@ -296,7 +288,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>濕度</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 15, sm: 16.5 } }}>
-                  {period.relativeHumidity}%
+                  {displayHumidity}%
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
@@ -310,11 +302,11 @@ function PeriodCardBase({
               </Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                 <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                  <WbSunnyIcon sx={{ fontSize: 20, color: isNightPeriod ? 'text.secondary' : uvLevelColor(period.uvExposureLevel) }} />
+                  <WbSunnyIcon sx={{ fontSize: 20, color: isNightPeriod ? 'text.secondary' : uvLevelColor(uvLevel) }} />
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>紫外線</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 700, color: isNightPeriod ? 'text.secondary' : uvLevelColor(period.uvExposureLevel), fontSize: { xs: 14, sm: 15.5 } }}>
-                  {isNightPeriod ? '夜間無' : (uvIdx !== '-' ? `UV ${uvIdx}` : '-')}
+                <Typography sx={{ fontWeight: 700, color: isNightPeriod ? 'text.secondary' : uvLevelColor(uvLevel), fontSize: { xs: 14, sm: 15.5 } }}>
+                  {isNightPeriod ? '夜間無' : (uvIdx !== '-' ? `當日 UV ${uvIdx}` : '-')}
                 </Typography>
               </Stack>
             </Stack>
@@ -362,7 +354,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>濕度</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 14.5, sm: 16 } }}>
-                  {period.relativeHumidity}%
+                  {displayHumidity}%
                 </Typography>
               </Stack>
             </Stack>
@@ -413,7 +405,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>濕度</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 14.5, sm: 16 } }}>
-                  {period.relativeHumidity}%
+                  {displayHumidity}%
                 </Typography>
               </Stack>
 
@@ -424,7 +416,7 @@ function PeriodCardBase({
                   <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>風速</Typography>
                 </Stack>
                 <Typography sx={{ fontWeight: 700, color: '#E2E8F0', fontSize: { xs: 13.5, sm: 14.5 }, textAlign: 'right' }}>
-                  {period.windDirection} {period.windSpeed}m/s
+                  {displayWindDirection} {displayWindSpeed}m/s
                 </Typography>
               </Stack>
 
@@ -432,11 +424,11 @@ function PeriodCardBase({
               {uvIdx !== '-' && !isNightPeriod && (
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                   <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                    <WbSunnyIcon sx={{ fontSize: 20, color: uvLevelColor(period.uvExposureLevel) }} />
-                    <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>紫外線</Typography>
+                    <WbSunnyIcon sx={{ fontSize: 20, color: uvLevelColor(uvLevel) }} />
+                    <Typography sx={{ color: 'text.secondary', fontSize: { xs: 14, sm: 15 }, fontWeight: 600 }}>當日紫外線</Typography>
                   </Stack>
-                  <Typography sx={{ fontWeight: 800, color: uvLevelColor(period.uvExposureLevel), fontSize: { xs: 14.5, sm: 16 } }}>
-                    {uvIdx}
+                  <Typography sx={{ fontWeight: 800, color: uvLevelColor(uvLevel), fontSize: { xs: 14.5, sm: 16 } }}>
+                    {uvIdx}{uvLevel ? ` ${uvLevel}` : ''}
                   </Typography>
                 </Stack>
               )}

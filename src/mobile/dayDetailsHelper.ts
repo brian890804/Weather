@@ -1,5 +1,5 @@
 import React from "react";
-import dayjs from "dayjs";
+import { twTime } from "../utils/time";
 import ThermostatIcon from "@mui/icons-material/Thermostat";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import AirIcon from "@mui/icons-material/Air";
@@ -11,168 +11,142 @@ import { beaufortLabel } from "../utils/weatherUtils";
 export function computeActiveDayDetails(
   activeDayForecast: DayForecast,
   periods: WeatherPeriod[],
-  currentPeriod: WeatherPeriod | null,
   skyTextPrimary: string,
 ): ActiveDayDetails {
-  const isToday = activeDayForecast.dateStr === dayjs().format("YYYY-MM-DD");
-
+  const day = activeDayForecast;
   const dayPeriods = periods.filter(
-    (p) =>
-      dayjs(p.startTime).format("YYYY-MM-DD") === activeDayForecast.dateStr,
+    (p) => twTime(p.startTime).format("YYYY-MM-DD") === day.dateStr,
   );
 
-  // ── 全日指標統計：聚合當天所有時段（若有）計算全日最高/最低、最大降雨、全日平均濕度、盛行風與最大風力等 ──
-  const validAppTemps = dayPeriods
-    .map((p) => parseFloat(p.maxApparentTemperature || p.temperature))
-    .filter((v) => !isNaN(v));
-  const appTempMin =
-    validAppTemps.length > 0
-      ? Math.min(...validAppTemps)
-      : activeDayForecast.minTemp;
-  const appTempMax =
-    validAppTemps.length > 0
-      ? Math.max(...validAppTemps)
-      : activeDayForecast.maxTemp;
+  // ── 全日指標：優先聚合逐 3 小時時段；該日不在 3 天預報範圍內時，改用一週預報 (F-D0047-091) 的同項數值 ──
+  // 任何缺資料的項目一律顯示 "--"，不推估、不填預設值
+  const nums = (vals: string[]) => vals.map((v) => parseFloat(v)).filter((v) => !isNaN(v));
 
-  // 體感溫度顯示：全日區間 (如 22° ~ 30°C)；若是今天且在看當前時段，顯示當前體感與今日區間
-  const appTempValue = `${appTempMin}° ~ ${appTempMax}°C`;
-  const diffMax = appTempMax - activeDayForecast.maxTemp;
-  const diffLabel =
-    diffMax > 0
-      ? `全日體感比實際高約 ${diffMax}°`
-      : diffMax < 0
-        ? `全日體感比實際低約 ${Math.abs(diffMax)}°`
-        : "全日體感接近實際氣溫";
-
-  // 降雨機率：全日最大降雨機率 (Max POP)，符合氣象防雨安全準則
-  const allDayPops = [
-    activeDayForecast.maxPop || 0,
-    ...dayPeriods.map((p) => parseInt(p.probabilityOfPrecipitation) || 0),
-  ];
-  let popVal = Math.max(...allDayPops);
-  if (popVal === 0 && (activeDayForecast.weather?.includes("雨") || activeDayForecast.description?.includes("雨"))) {
-    popVal = activeDayForecast.weather.includes("陣雨") || activeDayForecast.weather.includes("雷雨") ? 40 : 30;
+  // 體感溫度：全日區間
+  const appMaxs = nums(dayPeriods.map((p) => p.maxApparentTemperature));
+  const appMins = nums(dayPeriods.map((p) => p.minApparentTemperature));
+  const appTempMax: number | null =
+    appMaxs.length > 0 ? Math.max(...appMaxs) : day.maxApparentTemp ?? null;
+  const appTempMin: number | null =
+    appMins.length > 0 ? Math.min(...appMins) : day.minApparentTemp ?? null;
+  const appTempValue =
+    appTempMin !== null && appTempMax !== null ? `${appTempMin}° ~ ${appTempMax}°C` : "--";
+  const hasDayTemp = day.maxTemp > -99 && day.minTemp < 99;
+  let diffLabel = "暫無體感資料";
+  if (appTempMax !== null && hasDayTemp) {
+    const diffMax = Math.round((appTempMax - day.maxTemp) * 10) / 10;
+    diffLabel =
+      diffMax > 0
+        ? `最高體感比最高溫高約 ${diffMax}°`
+        : diffMax < 0
+          ? `最高體感比最高溫低約 ${Math.abs(diffMax)}°`
+          : "最高體感接近最高溫";
   }
 
-  // 風向風速：統計當日最大級數與常見風向
-  let maxBeaufort = 2;
-  let maxWindMs = 0;
-  let prevailingDir = "";
-  const dirCounts: Record<string, number> = {};
+  // 降雨機率：全日最大降雨機率 (Max POP)；氣象署未提供時為 null
+  const periodPops = dayPeriods
+    .map((p) => parseInt(p.probabilityOfPrecipitation))
+    .filter((v) => !isNaN(v));
+  const popCandidates = [...periodPops, ...(day.maxPop !== null ? [day.maxPop] : [])];
+  const popVal: number | null = popCandidates.length > 0 ? Math.max(...popCandidates) : null;
 
+  // 風向風速：統計當日最大級數、最大風速與最常見風向
+  const bfts = nums(dayPeriods.map((p) => p.beaufortScale));
+  const wss = nums(dayPeriods.map((p) => p.windSpeed));
+  const maxBeaufort: number | null = bfts.length > 0 ? Math.max(...bfts) : day.maxBeaufort ?? null;
+  const maxWindMs: number | null = wss.length > 0 ? Math.max(...wss) : day.maxWindSpeed ?? null;
+  const dirCounts: Record<string, number> = {};
   dayPeriods.forEach((p) => {
-    const b = parseInt(p.beaufortScale) || 0;
-    if (b > maxBeaufort) maxBeaufort = b;
-    const ws = parseFloat(p.windSpeed) || 0;
-    if (ws > maxWindMs) maxWindMs = ws;
-    const dir =
-      p.windDirection && p.windDirection !== "-" ? p.windDirection : "";
-    if (dir) {
-      dirCounts[dir] = (dirCounts[dir] || 0) + 1;
+    if (p.windDirection && p.windDirection !== "-") {
+      dirCounts[p.windDirection] = (dirCounts[p.windDirection] || 0) + 1;
     }
   });
-
-  const sortedDirs = Object.entries(dirCounts).sort((a, b) => b[1] - a[1]);
-  prevailingDir = sortedDirs[0]?.[0] || "偏東風";
+  const prevailingDir =
+    Object.entries(dirCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || day.windDirection || "--";
   const windSpeed =
-    maxWindMs > 0 ? `最大 ${maxWindMs.toFixed(1)} m/s` : `${maxBeaufort} 級風`;
-  const windSub = `${prevailingDir} · 最大 ${maxBeaufort} 級 (${beaufortLabel(String(maxBeaufort))})`;
+    maxWindMs !== null
+      ? `最大 ${maxWindMs.toFixed(1)} m/s`
+      : maxBeaufort !== null
+        ? `${maxBeaufort} 級風`
+        : "--";
+  const windSub =
+    maxBeaufort !== null
+      ? `${prevailingDir} · 最大 ${maxBeaufort} 級 (${beaufortLabel(String(maxBeaufort))})`
+      : prevailingDir;
 
   // 相對濕度：全日平均濕度
-  const validHum = dayPeriods
-    .map((p) => parseFloat(p.relativeHumidity))
-    .filter((v) => !isNaN(v));
-  const avgHumidity =
-    validHum.length > 0
-      ? Math.round(validHum.reduce((a, b) => a + b, 0) / validHum.length)
-      : popVal > 50
-        ? 78
-        : popVal > 20
-          ? 70
-          : 62;
-  const humidity = `${avgHumidity}%`;
-  const validDew = dayPeriods
-    .map((p) => parseFloat(p.dewPoint))
-    .filter((v) => !isNaN(v));
+  const hums = nums(dayPeriods.map((p) => p.relativeHumidity));
+  const avgHumidity: number | null =
+    hums.length > 0
+      ? Math.round(hums.reduce((a, b) => a + b, 0) / hums.length)
+      : day.avgHumidity ?? null;
+  const humidity = avgHumidity !== null ? `${avgHumidity}%` : "--";
+  const dews = nums(dayPeriods.map((p) => p.dewPoint));
   const avgDew =
-    validDew.length > 0
-      ? (validDew.reduce((a, b) => a + b, 0) / validDew.length).toFixed(1)
-      : null;
+    dews.length > 0 ? (dews.reduce((a, b) => a + b, 0) / dews.length).toFixed(1) : null;
   const humSub = avgDew ? `露點 ${avgDew}°C` : "全日平均相對濕度";
 
-  // 紫外線指數：全日最高紫外線
-  const validUvs = dayPeriods
-    .map((p) => parseInt(p.uvIndex))
-    .filter((v) => !isNaN(v) && v >= 0);
-  const maxUvVal = validUvs.length > 0 ? Math.max(...validUvs) : null;
-  const uvVal =
-    maxUvVal !== null
-      ? `${maxUvVal} 級`
-      : activeDayForecast.weather.includes("晴")
-        ? "7 級"
-        : activeDayForecast.weather.includes("多雲")
-          ? "5 級"
-          : "3 級";
+  // 紫外線指數：氣象署一週預報提供的當日白天紫外線指數與分級
+  const uvVal = day.uvIndex !== undefined ? `${day.uvIndex} 級` : "--";
   const uvSub =
-    maxUvVal !== null
-      ? maxUvVal >= 8
-        ? "危險/過量級防曬"
-        : maxUvVal >= 6
-          ? "高量級防曬"
-          : maxUvVal >= 3
-            ? "中量級防曬"
-            : "微量級防護"
-      : activeDayForecast.weather.includes("晴")
-        ? "高量級防曬"
-        : activeDayForecast.weather.includes("多雲")
-          ? "中量級防曬"
-          : "低量微防護";
+    day.uvIndex !== undefined
+      ? day.uvLevel
+        ? `${day.uvLevel}${day.uvIndex >= 6 ? " · 注意防曬" : ""}`
+        : "紫外線指數"
+      : "暫無紫外線資料";
 
-  // 舒適度指數：綜合全日舒適度描述
-  const comfortDescriptions = Array.from(
-    new Set(
-      dayPeriods
-        .map((p) => p.maxComfortIndexDescription)
-        .filter((d) => d && d !== "-"),
-    ),
-  );
+  // 舒適度：依舒適度指數由低到高呈現範圍
+  const comfortPairs: { index: number; desc: string }[] = [];
+  dayPeriods.forEach((p) => {
+    const lo = parseFloat(p.minComfortIndex);
+    const hi = parseFloat(p.maxComfortIndex);
+    if (!isNaN(lo) && p.minComfortIndexDescription && p.minComfortIndexDescription !== "-") {
+      comfortPairs.push({ index: lo, desc: p.minComfortIndexDescription });
+    }
+    if (!isNaN(hi) && p.maxComfortIndexDescription && p.maxComfortIndexDescription !== "-") {
+      comfortPairs.push({ index: hi, desc: p.maxComfortIndexDescription });
+    }
+  });
+  comfortPairs.sort((a, b) => a.index - b.index);
+  const comfortLo = comfortPairs[0]?.desc ?? day.comfortRange?.minDesc;
+  const comfortHi = comfortPairs[comfortPairs.length - 1]?.desc ?? day.comfortRange?.maxDesc;
   const comfortVal =
-    comfortDescriptions.length > 1
-      ? `${comfortDescriptions[0]} 至 ${comfortDescriptions[comfortDescriptions.length - 1]}`
-      : comfortDescriptions[0] ||
-        (activeDayForecast.maxTemp >= 30
-          ? "悶熱"
-          : activeDayForecast.maxTemp >= 25
-            ? "舒適"
-            : activeDayForecast.maxTemp >= 20
-              ? "涼爽"
-              : "稍有寒意");
-  const comfortSub = `氣溫 ${activeDayForecast.minTemp}° ~ ${activeDayForecast.maxTemp}°C`;
+    comfortLo && comfortHi
+      ? comfortLo === comfortHi
+        ? comfortLo
+        : `${comfortLo} 至 ${comfortHi}`
+      : "--";
+  const comfortSub = hasDayTemp ? `氣溫 ${day.minTemp}° ~ ${day.maxTemp}°C` : "--";
+
+  // 穿衣指南依全日最高體感判斷；無體感資料時退回最高溫
+  const clothBasis = appTempMax ?? (hasDayTemp ? day.maxTemp : null);
 
   let cloth = {
     title: "短袖輕裝",
     detail: "薄短袖，天氣宜人舒適",
     emoji: "👕",
   };
-  if (appTempMax >= 30) {
+  if (clothBasis === null) {
+    cloth = { title: "--", detail: "暫無溫度資料", emoji: "👕" };
+  } else if (clothBasis >= 30) {
     cloth = {
       title: "清涼透氣",
       detail: "純棉短袖，注意防曬補水",
       emoji: "☀️",
     };
-  } else if (appTempMax >= 25) {
+  } else if (clothBasis >= 25) {
     cloth = {
       title: "短袖輕裝",
       detail: "薄短袖，天氣宜人舒適",
       emoji: "👕",
     };
-  } else if (appTempMax >= 20) {
+  } else if (clothBasis >= 20) {
     cloth = {
       title: "輕薄外套",
       detail: "長袖配薄夾克，舒適防風",
       emoji: "🧥",
     };
-  } else if (appTempMax >= 15) {
+  } else if (clothBasis >= 15) {
     cloth = { title: "保暖毛衣", detail: "厚上衣與防風外套", emoji: "🧣" };
   } else {
     cloth = {
@@ -182,28 +156,23 @@ export function computeActiveDayDetails(
     };
   }
 
-  // ── 雨具與外出活動邏輯（與 Page 1 嚴格一致：只要天氣文字含「雨」或機率達標即判定帶傘） ──
+  // ── 雨具與外出活動邏輯（與 Page 1 一致：預報天氣文字含「雨」或機率達標即判定帶傘） ──
+  const pop = popVal ?? -1;
   const isRainingCondition =
-    dayPeriods.some(
-      (p) =>
-        p.weather && (p.weather.includes("雨") || p.weather.includes("陣雨")),
-    ) ||
-    (activeDayForecast.weather &&
-      (activeDayForecast.weather.includes("雨") ||
-        activeDayForecast.weather.includes("陣雨"))) ||
-    popVal >= 40;
+    dayPeriods.some((p) => p.weather?.includes("雨")) ||
+    Boolean(day.weather?.includes("雨")) ||
+    pop >= 40;
 
-  const needUmbrella = isRainingCondition || popVal >= 10;
+  const needUmbrella = isRainingCondition || pop >= 10;
 
   const rainTipValue = isRainingCondition
-    ? activeDayForecast.weather?.includes("陣雨") ||
-      dayPeriods.some((p) => p.weather?.includes("陣雨"))
+    ? day.weather?.includes("陣雨") || dayPeriods.some((p) => p.weather?.includes("陣雨"))
       ? "🌧 陣雨必備雨具"
       : "🌧 務必攜傘"
-    : popVal >= 40
-      ? "🌧 務必攜傘"
-      : popVal >= 10
-        ? "☂️ 建議備傘"
+    : pop >= 10
+      ? "☂️ 建議備傘"
+      : popVal === null
+        ? "❔ 暫無降雨機率"
         : "☀️ 無需攜傘";
 
   const tips = [
@@ -216,7 +185,7 @@ export function computeActiveDayDetails(
     {
       key: "activity",
       label: "戶外活動",
-      value: !needUmbrella && popVal < 20 ? "🏃 適合外出" : "🏠 留意天氣",
+      value: !needUmbrella && popVal !== null && popVal < 20 ? "🏃 適合外出" : "🏠 留意天氣",
       color: skyTextPrimary,
     },
   ];
@@ -237,12 +206,14 @@ export function computeActiveDayDetails(
       iconColor: "#38BDF8",
       iconBg: "rgba(56,189,248,0.22)",
       label: "降雨機率",
-      value: `${popVal}%`,
-      sub: isRainingCondition
-        ? "有雨 · 建議攜帶雨具"
-        : popVal >= 40
-          ? "外出務必帶傘"
-          : popVal >= 10
+      value: popVal !== null ? `${popVal}%` : "--",
+      sub: popVal === null
+        ? isRainingCondition
+          ? "預報有雨 · 氣象署未提供機率"
+          : "氣象署未提供降雨機率"
+        : isRainingCondition
+          ? "預報有雨 · 建議攜帶雨具"
+          : pop >= 10
             ? "建議備折疊傘"
             : "降雨機率低",
     },

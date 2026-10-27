@@ -3,6 +3,7 @@ import type {
   WeatherPeriod,
   ParsedCityData,
   ParsedTownshipData,
+  WeeklyForecastDay,
 } from "../types/weather";
 
 export interface MobileWeatherProps {
@@ -23,15 +24,8 @@ export interface MobileWeatherProps {
   onShowMessage?: (msg: string) => void;
 }
 
-export interface DayForecast {
-  dateStr: string;
+export interface DayForecast extends Omit<WeeklyForecastDay, "description"> {
   dayLabel: string;
-  minTemp: number;
-  maxTemp: number;
-  weather: string;
-  weatherCode: string;
-  maxPop: number;
-  startTime: string;
   description?: string;
 }
 

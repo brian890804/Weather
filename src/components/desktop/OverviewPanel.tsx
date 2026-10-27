@@ -13,11 +13,13 @@ import ExploreIcon from '@mui/icons-material/Explore';
 import DeviceThermostatIcon from '@mui/icons-material/DeviceThermostat';
 import SpeedIcon from '@mui/icons-material/Speed';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
-import dayjs from 'dayjs';
+import { twTime } from '../../utils/time';
 import WeatherIcon from '../WeatherIcon/WeatherIcon';
 import DragScrollBox from '../common/DragScrollBox';
 import type { WeatherPeriod } from '../../types/weather';
-import { tempColor, popColor, beaufortLabel, calculateSteadmanApparentTemp } from '../../utils/weatherUtils';
+import { tempColor, popColor, beaufortLabel } from '../../utils/weatherUtils';
+import { useActiveStation } from '../../hooks/useActiveStation';
+import { computeLiveConditions, isPeriodNow } from '../../utils/liveConditions';
 import { R } from '../../App';
 import { useWeatherStore } from '../../store/weatherStore';
 
@@ -164,54 +166,25 @@ interface OverviewPanelProps {
 function OverviewPanelBase({ period }: OverviewPanelProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const start = dayjs(period.startTime);
+  const start = twTime(period.startTime);
   const pop = period.probabilityOfPrecipitation;
 
-  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
-  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
-  const townshipStations = useWeatherStore((s) => s.townshipStations);
-  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
   const setUserSelectedStation = useWeatherStore((s) => s.setUserSelectedStation);
-  const selectedCity = useWeatherStore((s) => s.selectedCity);
-  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
-  const now = dayjs();
-  const isCurrent = now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime));
-  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+  const { townshipKey, stationsList, station, isCityFallback } = useActiveStation();
+  const isCurrent = isPeriodNow(period);
+  const live = computeLiveConditions(period, station, { isNow: isCurrent, isCityFallback });
 
-  const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
-  const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
-  const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
-
-  const realtimeTemp = activeStation?.temp || (townshipKey && realtimeTemps[townshipKey] ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity]);
-  const realtimeWind = activeStation?.wind || (townshipKey && realtimeWinds[townshipKey] ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity]);
-  const realtimeStationName = activeStation?.stationName || (townshipKey && realtimeWinds[townshipKey]?.stationName ? realtimeWinds[townshipKey].stationName : null);
-  const realtimeWxText = activeStation?.weather;
-  const realtimeRainNow = activeStation?.rainNow ?? 0;
-
-  const displayTemp = (isCurrent && realtimeTemp) ? realtimeTemp : period.temperature;
-  const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : period.windSpeed;
-  const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : period.windDirection;
-  const displayBeaufortScale = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : period.beaufortScale;
-
-  const displayHeroWeather =
-    isCurrent && realtimeWxText
-      ? realtimeWxText
-      : (isCurrent && realtimeRainNow > 0 && period?.weather && !period.weather.includes("雨"))
-      ? `${period.weather}有雨`
-      : period?.weather;
-
-  const isRainingNow = isCurrent && (realtimeRainNow > 0 || (displayHeroWeather && displayHeroWeather.includes("雨")));
-
-  let displayApparentTemp = period.maxApparentTemperature;
-  if (isCurrent && realtimeTemp) {
-    const curTempNum = parseFloat(realtimeTemp);
-    const curRhNum = parseFloat(activeStation?.humidity || period.relativeHumidity) || 65;
-    const curWindNum = realtimeWind ? parseFloat(realtimeWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
-    if (!isNaN(curTempNum)) {
-      displayApparentTemp = calculateSteadmanApparentTemp(curTempNum, curRhNum, curWindNum);
-    }
-  }
+  const realtimeStationName = live.stationName;
+  const displayTemp = live.temperature;
+  const displayHumidity = live.humidity;
+  const displayWindSpeed = live.windSpeed;
+  const displayWindDirection = live.windDirection;
+  const displayBeaufortScale = live.beaufortScale;
+  const displayHeroWeather = live.weather;
+  const displayApparentTemp = live.outdoorApparent;
+  const isRainingNow = live.isRainingObserved;
+  const popNum = parseInt(pop);
+  const hasPop = !isNaN(popNum);
 
   const circleStats = useMemo(() => (
     <>
@@ -219,10 +192,10 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
       <CircleStat
         value={displayTemp}
         unit="°C"
-        label="實測氣溫"
+        label={live.temperatureObserved ? '實測氣溫' : '預報氣溫'}
         icon={<ThermostatIcon fontSize="inherit" />}
         color={tempColor(displayTemp)}
-        subtext={isCurrent && realtimeTemp ? (realtimeStationName ? `即測站：${realtimeStationName}` : '即測站點真實現況') : '預報氣溫'}
+        subtext={live.temperatureObserved ? `即測站：${realtimeStationName}${live.isCityFallback ? '（縣市代表站）' : ''}` : '時段起點預報'}
       />
 
       {/* 2. 體感溫度 */}
@@ -232,26 +205,26 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         label="體感溫度"
         icon={<DeviceThermostatIcon fontSize="inherit" />}
         color="#FB923C"
-        subtext={isCurrent && realtimeTemp ? '實測精算體感' : '人體感受'}
+        subtext={live.temperatureObserved ? '實測精算體感' : '氣象署預報體感'}
       />
 
       {/* 3. 降雨機率 */}
       <CircleStat
-        value={isRainingNow && parseInt(pop) < 30 ? '現場有雨' : (pop !== '-' ? `${pop}%` : '0%')}
+        value={isRainingNow && (!hasPop || popNum < 30) ? '現場有雨' : hasPop ? `${popNum}%` : '--'}
         label="降雨情況"
         icon={<UmbrellaIcon fontSize="inherit" />}
         color={isRainingNow ? '#38BDF8' : popColor(pop)}
-        subtext={isRainingNow ? (realtimeRainNow > 0 ? `累積雨量 ${realtimeRainNow}mm · 務必帶傘` : '測站回報有雨 · 務必帶傘') : (parseInt(pop) >= 40 ? '出門務必帶傘' : parseInt(pop) >= 10 ? '建議備折疊傘' : '降雨機率低')}
+        subtext={isRainingNow ? '測站回報有雨 · 務必帶傘' : live.isRainForecast || (hasPop && popNum >= 40) ? '預報有雨 · 出門務必帶傘' : hasPop && popNum >= 10 ? '建議備折疊傘' : hasPop ? '降雨機率低' : '暫無降雨機率資料'}
       />
 
       {/* 4. 相對濕度 */}
       <CircleStat
-        value={period.relativeHumidity}
+        value={displayHumidity}
         unit="%"
         label="相對濕度"
         icon={<WaterDropIcon fontSize="inherit" />}
         color="#38BDF8"
-        subtext="空氣含水量"
+        subtext={live.humidityObserved ? '即測站實測' : '預報值'}
       />
 
       {/* 5. 風速 */}
@@ -261,7 +234,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         label="平均風速"
         icon={<SpeedIcon fontSize="inherit" />}
         color="#818CF8"
-        subtext={isCurrent && realtimeWind ? '即測站即時風速' : '每秒公尺'}
+        subtext={live.windObserved ? '即測站即時風速' : '每秒公尺'}
       />
 
       {/* 6. 風向與風級 */}
@@ -281,7 +254,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
         label="露點溫度"
         icon={<ExploreIcon fontSize="inherit" />}
         color="#2DD4BF"
-        subtext="凝結指標"
+        subtext={live.isObserved ? '預報值 · 凝結指標' : '凝結指標'}
       />
 
       {/* 8. 舒適度 */}
@@ -296,17 +269,17 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
   ), [
     period,
     pop,
+    popNum,
+    hasPop,
+    live,
     displayTemp,
-    isCurrent,
-    realtimeTemp,
-    realtimeWind,
+    displayHumidity,
     displayApparentTemp,
     displayWindSpeed,
     displayWindDirection,
     displayBeaufortScale,
     realtimeStationName,
     isRainingNow,
-    realtimeRainNow,
   ]);
 
   return (
@@ -352,7 +325,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
             borderRadius: `${R.sm}px`,
           }}
         >
-          {start.format('M/D (dd) HH:mm')} – {dayjs(period.endTime).format('HH:mm')}
+          {start.format('M/D (dd) HH:mm')} – {twTime(period.endTime).format('HH:mm')}
         </Typography>
 
         {/* 手機水平排版 / 平板電腦垂直排版 */}
@@ -367,7 +340,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
           }}
         >
           <WeatherIcon
-            weatherCode={displayHeroWeather?.includes("雨") ? "08" : period.weatherCode}
+            weatherCode={live.weatherObserved ? "00" : period.weatherCode}
             weather={displayHeroWeather || period.weather}
             startTime={period.startTime}
             size={isMobile ? 80 : 130}
@@ -414,7 +387,7 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
               <Box
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (townshipKey && stationsList.length > 1) {
+                  if (townshipKey && !isCityFallback && stationsList.length > 1) {
                     const currentIndex = stationsList.findIndex((st) => st.stationName === realtimeStationName);
                     const nextIndex = (currentIndex + 1) % stationsList.length;
                     setUserSelectedStation(townshipKey, stationsList[nextIndex].stationName);
@@ -439,7 +412,8 @@ function OverviewPanelBase({ period }: OverviewPanelProps) {
               >
                 <Typography sx={{ fontSize: 12, color: '#93C5FD', fontWeight: 600 }}>
                   📡 觀測站：{realtimeStationName}
-                  {stationsList.length > 1 && ' (點擊切換 ⇄)'}
+                  {station?.obsTime ? `（${twTime(station.obsTime).format('HH:mm')} 觀測）` : ''}
+                  {isCityFallback ? '（縣市代表站）' : stationsList.length > 1 && ' (點擊切換 ⇄)'}
                 </Typography>
               </Box>
             )}

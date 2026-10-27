@@ -1,7 +1,7 @@
 import React from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import dayjs from "dayjs";
+import { twTime } from "../utils/time";
 import WeatherIcon from "../components/WeatherIcon/WeatherIcon";
 import type { DayForecast, ActiveDayDetails, SkyTheme } from "./types";
 
@@ -91,6 +91,8 @@ export default function MobileSevenDayList({
                 <WeatherIcon
                   weatherCode={day.weatherCode}
                   weather={day.weather}
+                  // 一週預報代表當天白天的天氣：固定以中午判斷日夜，避免晚上打開時全部變成夜間圖示
+                  startTime={`${day.dateStr}T12:00:00+08:00`}
                   size={40}
                 />
               </Box>
@@ -103,7 +105,7 @@ export default function MobileSevenDayList({
                   justifyContent: "center",
                 }}
               >
-                {day.maxPop > 0 ? (
+                {day.maxPop !== null && day.maxPop > 0 ? (
                   <Typography
                     sx={{
                       fontSize: { xs: 14.5, sm: 16 },
@@ -146,7 +148,7 @@ export default function MobileSevenDayList({
                     textAlign: "right",
                   }}
                 >
-                  {day.maxTemp}° / {day.minTemp}°
+                  {day.maxTemp > -99 ? `${day.maxTemp}°` : "--"} / {day.minTemp < 99 ? `${day.minTemp}°` : "--"}
                 </Typography>
               </Box>
             </Box>
@@ -178,7 +180,7 @@ export default function MobileSevenDayList({
               }}
             >
               💡 {activeDayDetails.dayLabel} (
-              {dayjs(activeDayDetails.dateStr).format("M/D")}) 預報詳情
+              {twTime(activeDayDetails.dateStr).format("M/D")}) 預報詳情
             </Typography>
             <Typography
               sx={{

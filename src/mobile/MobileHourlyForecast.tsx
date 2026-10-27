@@ -1,11 +1,12 @@
 import React from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import dayjs from "dayjs";
+import { twTime } from "../utils/time";
 import type { WeatherPeriod } from "../types/weather";
 import WeatherIcon from "../components/WeatherIcon/WeatherIcon";
 import type { SkyTheme } from "./types";
-import { useWeatherStore } from "../store/weatherStore";
+import { useActiveStation } from "../hooks/useActiveStation";
+import { computeLiveConditions, isPeriodNow } from "../utils/liveConditions";
 
 interface MobileHourlyForecastProps {
   periods: WeatherPeriod[];
@@ -22,28 +23,7 @@ export default function MobileHourlyForecast({
   onSelectPeriod,
   sky,
 }: MobileHourlyForecastProps) {
-  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
-  const townshipStations = useWeatherStore((s) => s.townshipStations);
-  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
-  const selectedCity = useWeatherStore((s) => s.selectedCity);
-  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
-  const townshipKey = selectedTownship
-    ? `${selectedCity}_${selectedTownship}`
-    : null;
-
-  const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
-  const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
-  const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
-
-  const realtimeTemp =
-    activeStation?.temp ||
-    (townshipKey && realtimeTemps[townshipKey]
-      ? realtimeTemps[townshipKey]
-      : realtimeTemps[selectedCity]);
-  const realtimeWxText = activeStation?.weather;
-  const realtimeRainNow = activeStation?.rainNow ?? 0;
-  const isRealtimeRaining = Boolean(realtimeWxText?.includes("雨") || realtimeRainNow > 0);
+  const { station } = useActiveStation();
 
   return (
     <Box
@@ -130,6 +110,10 @@ export default function MobileHourlyForecast({
             ? p.startTime === selectedPeriodTime
             : isCur;
           const pv = parseInt(p.probabilityOfPrecipitation) || 0;
+          // 只有涵蓋現在的時段才套用測站實測
+          const live = isPeriodNow(p) && station
+            ? computeLiveConditions(p, station, { isNow: true })
+            : null;
           return (
             <Box
               key={p.startTime}
@@ -183,7 +167,7 @@ export default function MobileHourlyForecast({
                     lineHeight: 1,
                   }}
                 >
-                  {dayjs(p.startTime).format("M/D")}
+                  {twTime(p.startTime).format("M/D")}
                   {isCur ? " (現)" : ""}
                 </Typography>
               </Box>
@@ -209,7 +193,7 @@ export default function MobileHourlyForecast({
                     lineHeight: 1,
                   }}
                 >
-                  {dayjs(p.startTime).format("HH:mm")}
+                  {twTime(p.startTime).format("HH:mm")}
                 </Typography>
               </Box>
 
@@ -224,8 +208,8 @@ export default function MobileHourlyForecast({
                 }}
               >
                 <WeatherIcon
-                  weatherCode={isCur && isRealtimeRaining ? "08" : p.weatherCode}
-                  weather={isCur && realtimeWxText ? realtimeWxText : (isCur && realtimeRainNow > 0 ? `${p.weather}有雨` : p.weather)}
+                  weatherCode={live?.weatherObserved ? "00" : p.weatherCode}
+                  weather={live?.weather ?? p.weather}
                   startTime={p.startTime}
                   size={50}
                 />
@@ -266,14 +250,14 @@ export default function MobileHourlyForecast({
                   sx={{
                     width: "100%",
                     textAlign: "center",
-                    fontSize: isCur && realtimeTemp ? 16.5 : 17.5,
+                    fontSize: live?.temperatureObserved ? 16.5 : 17.5,
                     fontWeight: 800,
                     color: sky.textPrimary,
                     lineHeight: 1,
                   }}
                 >
-                  {isCur && realtimeTemp
-                    ? `${realtimeTemp}°`
+                  {live?.temperatureObserved
+                    ? `${live.temperature}°`
                     : `${p.temperature}°`}
                 </Typography>
               </Box>

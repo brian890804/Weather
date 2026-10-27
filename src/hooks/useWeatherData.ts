@@ -1,6 +1,6 @@
 import axios from 'axios';
 import useSWR from 'swr';
-import dayjs from 'dayjs';
+import { twTime } from '../utils/time';
 import { useEffect, useRef, useCallback } from 'react';
 import type { ApiResponse, ParsedCityData, WeeklyForecastDay, RealtimeWindData } from '../types/weather';
 import { CITIES } from '../utils/cities';
@@ -128,11 +128,17 @@ function windSpeedToBeaufort(speedMs: number): string {
   return '12';
 }
 
+/** 氣象署測站缺測值為 -99 (字串或數字) */
+function isValidObs(v: unknown): boolean {
+  return v !== undefined && v !== null && v !== '' && v !== '-99' && v !== -99 && v !== 'None';
+}
+
 function getStationScore(st: any, town: string): number {
   let score = 0;
   const id = String(st.StationId || '');
   const name = String(st.StationName || '');
-  const cleanTown = town.replace(/區|鄉|鎮|市$/, '');
+  // 只去掉結尾的行政區單位（原本 /區|鄉|鎮|市$/ 會刪掉字串中第一個「區」或「鄉」「鎮」）
+  const cleanTown = town.replace(/(區|鄉|鎮|市)$/, '');
 
   // 1. 站名與鄉鎮名稱吻合 (如 "七堵", "暖暖", "八斗子", "大武崙")
   if (name === town || name === cleanTown) score += 80;
@@ -189,18 +195,17 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
         let windData: RealtimeWindData | undefined;
         const windSpeedRaw = st.WeatherElement?.WindSpeed;
         const windDirRaw = st.WeatherElement?.WindDirection;
-        if (windSpeedRaw !== undefined && windSpeedRaw !== null && windSpeedRaw !== '-99' && windSpeedRaw !== -99) {
+        if (isValidObs(windSpeedRaw)) {
           const speedNum = parseFloat(String(windSpeedRaw));
           if (!isNaN(speedNum) && speedNum >= 0) {
-            const dirNum = (windDirRaw !== undefined && windDirRaw !== null && windDirRaw !== '-99' && windDirRaw !== -99)
-              ? parseFloat(String(windDirRaw))
-              : 0;
-            const validDir = !isNaN(dirNum) && dirNum >= 0 ? dirNum : 0;
+            // 風向缺測 (-99) 或非 0~360 的特殊值 (如 990 風向不定) 時不捏造方位，標示為不定
+            const dirNum = isValidObs(windDirRaw) ? parseFloat(String(windDirRaw)) : NaN;
+            const hasDir = !isNaN(dirNum) && dirNum >= 0 && dirNum <= 360 && speedNum > 0;
             windData = {
               windSpeed: speedNum.toFixed(1), // 保留小數點後 1 位
-              windDirection: degreeToWindDirection(validDir),
-              windCardinal: degreeToWindCardinal(validDir),
-              windDegree: Math.round(validDir),
+              windDirection: hasDir ? degreeToWindDirection(dirNum) : speedNum === 0 ? '靜風' : '風向不定',
+              windCardinal: hasDir ? degreeToWindCardinal(dirNum) : '--',
+              windDegree: hasDir ? Math.round(dirNum) : null,
               beaufortScale: windSpeedToBeaufort(speedNum),
               stationName: name,
             };
@@ -210,17 +215,24 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
         // 解析現場天氣現象、雨量、相對濕度
         const rawWx = st.WeatherElement?.Weather;
         const wxStr = (rawWx && rawWx !== '-99' && rawWx !== 'None') ? String(rawWx).trim() : undefined;
+        // Now.Precipitation 是「本日 00:00 起累積雨量」，不能拿來判斷現在是否正在下雨
         const rawPrecip = st.WeatherElement?.Now?.Precipitation;
-        const rainNow = (rawPrecip !== undefined && rawPrecip !== null && rawPrecip !== '-99') ? parseFloat(String(rawPrecip)) : 0;
+        const rainToday = isValidObs(rawPrecip) ? parseFloat(String(rawPrecip)) : NaN;
         const rawRh = st.WeatherElement?.RelativeHumidity;
-        const humStr = (rawRh !== undefined && rawRh !== null && rawRh !== '-99') ? String(rawRh) : undefined;
+        const rhNum = isValidObs(rawRh) ? parseFloat(String(rawRh)) : NaN;
+        const humStr = !isNaN(rhNum) && rhNum >= 0 && rhNum <= 100 ? String(rhNum) : undefined;
+        const dailyHigh = st.WeatherElement?.DailyExtreme?.DailyHigh?.TemperatureInfo?.AirTemperature;
+        const dailyLow = st.WeatherElement?.DailyExtreme?.DailyLow?.TemperatureInfo?.AirTemperature;
 
         const stationWeatherItem: import('../types/weather').RealtimeStationWeather = {
           temp: tempStr,
           wind: windData,
           weather: wxStr,
-          rainNow: isNaN(rainNow) ? 0 : rainNow,
+          rainToday: isNaN(rainToday) || rainToday < 0 ? undefined : rainToday,
           humidity: humStr,
+          obsTime: st.ObsTime?.DateTime,
+          dailyHigh: isValidObs(dailyHigh) && !isNaN(parseFloat(dailyHigh)) ? parseFloat(dailyHigh).toFixed(1) : undefined,
+          dailyLow: isValidObs(dailyLow) && !isNaN(parseFloat(dailyLow)) ? parseFloat(dailyLow).toFixed(1) : undefined,
           stationName: name,
           stationId: id,
         };
@@ -370,6 +382,8 @@ interface WeatherFetchResult {
   weeklyForecasts: Record<string, WeeklyForecastDay[]>;
   realtimeTemps: Record<string, string>;
   realtimeWinds: Record<string, RealtimeWindData>;
+  realtimeWeather: RealtimeObservationsPayload['realtimeWeather'];
+  townshipStations: RealtimeObservationsPayload['townshipStations'];
 }
 
 async function fetchAllWeatherData(): Promise<WeatherFetchResult> {
@@ -378,6 +392,8 @@ async function fetchAllWeatherData(): Promise<WeatherFetchResult> {
   const existingWeekly = existingCache?.weeklyForecasts ?? {};
   const existingRealtime = existingCache?.realtimeTemps ?? {};
   const existingWinds = existingCache?.realtimeWinds ?? {};
+  const existingStationWeather = existingCache?.realtimeWeather ?? {};
+  const existingTownshipStations = existingCache?.townshipStations ?? {};
 
   // 同步平行拉取 1 週天氣預報、全台 870+ 測站即測真實溫度與風速風向、逐 3 小時 22 縣市資料
   const weeklyPromise = fetchWeeklyForecast(apiKey);
@@ -391,6 +407,8 @@ async function fetchAllWeatherData(): Promise<WeatherFetchResult> {
     weeklyForecasts: Object.keys(weeklyForecasts).length > 0 ? weeklyForecasts : existingWeekly,
     realtimeTemps: Object.keys(realtimeObs.temps).length > 0 ? realtimeObs.temps : existingRealtime,
     realtimeWinds: Object.keys(realtimeObs.winds).length > 0 ? realtimeObs.winds : existingWinds,
+    realtimeWeather: Object.keys(realtimeObs.realtimeWeather).length > 0 ? realtimeObs.realtimeWeather : existingStationWeather,
+    townshipStations: Object.keys(realtimeObs.townshipStations).length > 0 ? realtimeObs.townshipStations : existingTownshipStations,
   };
 }
 
@@ -503,13 +521,15 @@ export function useWeatherData() {
   /** 3. 當 API 回傳新資料時更新 storage 快取與 Store */
   useEffect(() => {
     if (!data || !data.cities || data.cities.length === 0) return;
-    const now = dayjs().toISOString();
+    const now = twTime().toISOString();
     writeCache({
       fetchedAt: now,
       cities: data.cities,
       weeklyForecasts: data.weeklyForecasts,
       realtimeTemps: data.realtimeTemps,
       realtimeWinds: data.realtimeWinds,
+      realtimeWeather: data.realtimeWeather,
+      townshipStations: data.townshipStations,
     });
     setCities(data.cities);
     if (data.weeklyForecasts) {
@@ -521,8 +541,14 @@ export function useWeatherData() {
     if (data.realtimeWinds) {
       setRealtimeWinds(data.realtimeWinds);
     }
+    if (data.realtimeWeather) {
+      setRealtimeWeather(data.realtimeWeather);
+    }
+    if (data.townshipStations) {
+      setTownshipStations(data.townshipStations);
+    }
     setLastFetchedAt(now);
-  }, [data, setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setLastFetchedAt]);
+  }, [data, setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations, setLastFetchedAt]);
 
   /** 4. 同步 loading 與 error */
   useEffect(() => {
@@ -585,18 +611,22 @@ export function useWeatherData() {
       if (force) {
         fetchPromise = fetchAllWeatherData().then((result) => {
           if (result && result.cities && result.cities.length > 0) {
-            const nowIso = dayjs().toISOString();
+            const nowIso = twTime().toISOString();
             writeCache({
               fetchedAt: nowIso,
               cities: result.cities,
               weeklyForecasts: result.weeklyForecasts,
               realtimeTemps: result.realtimeTemps,
               realtimeWinds: result.realtimeWinds,
+              realtimeWeather: result.realtimeWeather,
+              townshipStations: result.townshipStations,
             });
             setCities(result.cities);
             if (result.weeklyForecasts) setWeeklyForecasts(result.weeklyForecasts);
             if (result.realtimeTemps) setRealtimeTemps(result.realtimeTemps);
             if (result.realtimeWinds) setRealtimeWinds(result.realtimeWinds);
+            if (result.realtimeWeather) setRealtimeWeather(result.realtimeWeather);
+            if (result.townshipStations) setTownshipStations(result.townshipStations);
             setLastFetchedAt(nowIso);
           }
           return result;
@@ -608,7 +638,25 @@ export function useWeatherData() {
     } finally {
       setIsLoading(false);
     }
-  }, [refetchRealtime, mutate, setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setLastFetchedAt, setIsLoading]);
+  }, [refetchRealtime, mutate, setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations, setLastFetchedAt, setIsLoading]);
+
+  /** 7. 即測資料定時更新：頁面可見時每 10 分鐘、切回前景時重抓（僅 1 個輕量請求，不觸發 22 縣市預報） */
+  useEffect(() => {
+    const REALTIME_REFRESH_MS = 10 * 60 * 1000;
+    let lastRun = Date.now();
+    const run = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastRun < REALTIME_REFRESH_MS - 1000) return;
+      lastRun = Date.now();
+      refetchRealtime().catch(() => { /* 失敗時保留現有資料，由觀測時間判斷是否過期 */ });
+    };
+    const timer = setInterval(run, REALTIME_REFRESH_MS);
+    document.addEventListener('visibilitychange', run);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', run);
+    };
+  }, [refetchRealtime]);
 
   return { cities, isLoading, error, refetch, refetchRealtime };
 }

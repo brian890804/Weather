@@ -20,7 +20,7 @@ interface MobilePage2Props {
   sky: SkyTheme;
   cityName: string;
   townshipName: string;
-  currentPeriod: WeatherPeriod | null;
+  periods: WeatherPeriod[];
   onShowMessage?: (msg: string) => void;
 }
 
@@ -34,7 +34,7 @@ export default function MobilePage2({
   sky,
   cityName,
   townshipName,
-  currentPeriod,
+  periods,
   onShowMessage,
 }: MobilePage2Props) {
   const page2BentoCards = activeDayDetails?.bentoCards || [];
@@ -187,7 +187,7 @@ export default function MobilePage2({
         <NotificationSettingCard
           cityName={cityName}
           townshipName={townshipName}
-          currentPeriod={currentPeriod}
+          periods={periods}
           onShowMessage={onShowMessage}
           isCyberpunkMobile={true}
         />

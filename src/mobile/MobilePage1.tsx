@@ -6,13 +6,15 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import NearMeIcon from "@mui/icons-material/NearMe";
 import SyncIcon from "@mui/icons-material/Sync";
-import dayjs from "dayjs";
+import { twTime } from "../utils/time";
 import type { WeatherPeriod } from "../types/weather";
 import WeatherIcon from "../components/WeatherIcon/WeatherIcon";
 import MobileHudMetrics from "./MobileHudMetrics";
 import MobileHourlyForecast from "./MobileHourlyForecast";
 import type { HudMetricItem, SkyTheme } from "./types";
 import { useWeatherStore } from "../store/weatherStore";
+import { useActiveStation } from "../hooks/useActiveStation";
+import { computeLiveConditions, isPeriodNow } from "../utils/liveConditions";
 
 interface MobilePage1Props {
   active: boolean;
@@ -53,38 +55,19 @@ export default function MobilePage1({
   sky,
   onRefresh,
 }: MobilePage1Props) {
-  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
-  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
-  const townshipStations = useWeatherStore((s) => s.townshipStations);
-  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
   const setUserSelectedStation = useWeatherStore((s) => s.setUserSelectedStation);
+  const { townshipKey, stationsList, station, isCityFallback } = useActiveStation();
 
-  const isViewingCurrent =
-    !selectedPeriodTime || selectedPeriodTime === autoCurrentPeriod?.startTime;
-  const townshipKey = selectedTownship
-    ? `${selectedCity}_${selectedTownship}`
+  // 實測值只套用在「涵蓋現在」的時段；測站觀測過期時自動退回預報
+  const isViewingCurrent = isPeriodNow(period);
+  const live = period
+    ? computeLiveConditions(period, station, { isNow: isViewingCurrent, isCityFallback })
     : null;
+  const realtimeStationName = live?.stationName ?? null;
 
-  // 取得候選測站列表
-  const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
-  const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
-  const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
-
-  const realtimeTemp = activeStation?.temp || (townshipKey && realtimeTemps[townshipKey] ? realtimeTemps[townshipKey] : realtimeTemps[selectedCity]);
-  const realtimeStationName = activeStation?.stationName || (townshipKey && realtimeWinds[townshipKey]?.stationName ? realtimeWinds[townshipKey].stationName : null);
-  const realtimeWxText = activeStation?.weather;
-  const realtimeRainNow = activeStation?.rainNow ?? 0;
-
-  const displayHeroTemp =
-    isViewingCurrent && realtimeTemp ? realtimeTemp : period?.temperature;
-  // 若為當前實況且現場測站有回報天氣或降雨，優先使用測站現場實況（例如：陰有雨）
-  const displayHeroWeather =
-    isViewingCurrent && realtimeWxText
-      ? realtimeWxText
-      : (isViewingCurrent && realtimeRainNow > 0 && period?.weather && !period.weather.includes("雨"))
-      ? `${period.weather}有雨`
-      : period?.weather;
+  const displayHeroTemp = live?.temperature ?? period?.temperature;
+  // 當前時段若測站有回報天氣現象（例如：陰有雨），優先顯示測站現場實況
+  const displayHeroWeather = live?.weather ?? period?.weather;
 
   // ── 下拉更新 (Pull to Refresh) 智慧阻尼與極簡浮動指示器 ──
   const [pullDistance, setPullDistance] = useState(0);
@@ -249,7 +232,7 @@ export default function MobilePage1({
               }}
             >
               <WeatherIcon
-                weatherCode={displayHeroWeather?.includes("雨") ? "08" : period.weatherCode}
+                weatherCode={live?.weatherObserved ? "00" : period.weatherCode}
                 weather={displayHeroWeather || period.weather}
                 startTime={period.startTime}
                 size={150}
@@ -405,10 +388,12 @@ export default function MobilePage1({
                 letterSpacing: 0.3,
               }}
             >
-              更新:{" "}
+              預報抓取:{" "}
               {lastFetchedAt
-                ? dayjs(lastFetchedAt).format("HH:mm")
-                : dayjs().format("HH:mm")}
+                ? twTime(lastFetchedAt).format(
+                    twTime(lastFetchedAt).isSame(twTime(), "day") ? "HH:mm" : "M/D HH:mm",
+                  )
+                : "--"}
             </Typography>
 
             {/* 即測代表站標籤 (多站時點擊可切換) */}
@@ -416,7 +401,7 @@ export default function MobilePage1({
               <Box
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (townshipKey && stationsList.length > 1) {
+                  if (townshipKey && !isCityFallback && stationsList.length > 1) {
                     const currentIndex = stationsList.findIndex((st) => st.stationName === realtimeStationName);
                     const nextIndex = (currentIndex + 1) % stationsList.length;
                     setUserSelectedStation(townshipKey, stationsList[nextIndex].stationName);
@@ -446,7 +431,8 @@ export default function MobilePage1({
                   }}
                 >
                   📡 {realtimeStationName}
-                  {stationsList.length > 1 && ` ⇄`}
+                  {station?.obsTime ? ` ${twTime(station.obsTime).format("HH:mm")}` : ""}
+                  {isCityFallback ? "（縣市代表站）" : stationsList.length > 1 && ` ⇄`}
                 </Typography>
               </Box>
             )}

@@ -1,12 +1,12 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import dayjs from 'dayjs';
 import type { WeatherPeriod } from '../../types/weather';
 import { beaufortLabel, getWeatherIconUrl } from '../../utils/weatherUtils';
 import { R } from '../../App';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
-import { useWeatherStore } from '../../store/weatherStore';
+import { useActiveStation } from '../../hooks/useActiveStation';
+import { computeLiveConditions, isPeriodNow } from '../../utils/liveConditions';
 
 function windDegree(dir: string): number {
   const map: Record<string, number> = {
@@ -161,23 +161,17 @@ export default function WindPanel({
   onSelectPeriod,
   autoCurrentPeriodStartTime,
 }: WindPanelProps) {
-  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
-  const selectedCity = useWeatherStore((s) => s.selectedCity);
-  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
+  // 實測值只套用在涵蓋現在的時段，並與總覽共用同一個（可手動切換的）測站
+  const { station, isCityFallback } = useActiveStation();
+  const live = currentPeriod
+    ? computeLiveConditions(currentPeriod, station, { isNow: isPeriodNow(currentPeriod), isCityFallback })
+    : null;
 
-  const now = dayjs();
-  const isCurrent = currentPeriod
-    ? (currentPeriod.startTime === autoCurrentPeriodStartTime ||
-       (now.isAfter(dayjs(currentPeriod.startTime)) && now.isBefore(dayjs(currentPeriod.endTime))))
-    : false;
-
-  const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
-  const realtimeWind = (townshipKey && realtimeWinds[townshipKey]) ? realtimeWinds[townshipKey] : realtimeWinds[selectedCity];
-
-  const displayWindDirection = (isCurrent && realtimeWind) ? realtimeWind.windDirection : (currentPeriod?.windDirection ?? '');
-  const displayWindSpeed = (isCurrent && realtimeWind) ? realtimeWind.windSpeed : (currentPeriod?.windSpeed ?? '');
-  const displayBeaufort = (isCurrent && realtimeWind) ? realtimeWind.beaufortScale : (currentPeriod?.beaufortScale ?? '');
-  const displayWindDegree = (isCurrent && realtimeWind) ? realtimeWind.windDegree : undefined;
+  const displayWindDirection = live?.windDirection ?? '';
+  const displayWindSpeed = live?.windSpeed ?? '';
+  const displayBeaufort = live?.beaufortScale ?? '';
+  // 實測風向不定時 windDegree 為 null：羅盤不旋轉，避免顯示捏造的「北風」
+  const displayWindDegree = live?.windObserved ? live.windDegree ?? 0 : undefined;
 
   return (
     <Box>
@@ -234,9 +228,9 @@ export default function WindPanel({
             </Typography>
             <Typography variant="h6" sx={{ color: 'text.secondary', mt: 0.5 }}>
               {beaufortLabel(displayBeaufort)} (蒲福 {displayBeaufort} 級)
-              {isCurrent && realtimeWind?.stationName && (
+              {live?.windObserved && live.stationName && (
                 <Typography component="span" sx={{ fontSize: '0.85rem', color: '#60A5FA', ml: 1, fontWeight: 700 }}>
-                  〔即測站：{realtimeWind.stationName}〕
+                  〔即測站：{live.stationName}〕
                 </Typography>
               )}
             </Typography>

@@ -1,7 +1,10 @@
-import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import { twTime } from './time';
 import type { CachedData, ParsedCityData, WeatherPeriod } from '../types/weather';
 
-const CACHE_KEY = 'weather_cities_cache_v2';
+// v3：時段最高/最低改為真實逐時區間、一週預報加入紫外線與不再推估降雨機率，升版以捨棄舊格式快取
+const CACHE_KEY = 'weather_cities_cache_v3';
+const LEGACY_CACHE_KEYS = ['weather_cities_cache_v2'];
 const RATE_LIMIT_KEY = 'weather_cwa_rate_limit_until';
 const WINDOW_HOURS = 6;
 
@@ -13,21 +16,21 @@ export const MIN_FRESH_MINUTES = MIN_FRESH_HOURS * 60; // 180 分鐘
 export const MANUAL_REFRESH_MIN_INTERVAL_MINUTES = 10;
 
 /** 取得當前所屬的 6hr 視窗起點 (UTC+8: 00:00, 06:00, 12:00, 18:00) */
-export function getCurrentWindowStart(now = dayjs()): dayjs.Dayjs {
+export function getCurrentWindowStart(now = twTime()): Dayjs {
   const h = now.hour();
   const windowH = Math.floor(h / WINDOW_HOURS) * WINDOW_HOURS;
   return now.startOf('day').add(windowH, 'hour');
 }
 
 /** 取得當前視窗的結束時間 */
-export function getCurrentWindowEnd(now = dayjs()): dayjs.Dayjs {
+export function getCurrentWindowEnd(now = twTime()): Dayjs {
   return getCurrentWindowStart(now).add(WINDOW_HOURS, 'hour');
 }
 
 /** 記錄氣象署 429 限流冷卻截止時間 (預設冷卻 minutes 分鐘) */
 export function setRateLimitCooldown(minutes = 5): void {
   try {
-    const until = dayjs().add(minutes, 'minute').toISOString();
+    const until = twTime().add(minutes, 'minute').toISOString();
     localStorage.setItem(RATE_LIMIT_KEY, until);
   } catch {
     /* ignore */
@@ -44,11 +47,11 @@ export function clearRateLimitCooldown(): void {
 }
 
 /** 檢查是否仍處於 429 限流冷卻保護中 */
-export function isRateLimited(now = dayjs()): boolean {
+export function isRateLimited(now = twTime()): boolean {
   try {
     const raw = localStorage.getItem(RATE_LIMIT_KEY);
     if (!raw) return false;
-    const until = dayjs(raw);
+    const until = twTime(raw);
     if (!until.isValid()) return false;
     if (now.isBefore(until)) {
       return true;
@@ -62,9 +65,9 @@ export function isRateLimited(now = dayjs()): boolean {
 }
 
 /** 取得距上次更新經過的分鐘數 */
-export function getMinutesSinceFetched(fetchedAt: string | null | undefined, now = dayjs()): number {
+export function getMinutesSinceFetched(fetchedAt: string | null | undefined, now = twTime()): number {
   if (!fetchedAt) return Infinity;
-  const t = dayjs(fetchedAt);
+  const t = twTime(fetchedAt);
   if (!t.isValid()) return Infinity;
   return Math.max(0, now.diff(t, 'minute'));
 }
@@ -93,6 +96,8 @@ const PERIOD_PROP_KEYS: (keyof WeatherPeriod)[] = [
   'weatherDescription',
   'uvIndex',
   'uvExposureLevel',
+  // 新欄位一律附加在最後，維持既有陣列索引相容
+  'apparentTemperature',
 ];
 
 function packPeriod(p: WeatherPeriod): (string | undefined)[] {
@@ -165,6 +170,7 @@ function unpackData(packed: any): CachedData | null {
 /** 讀取 localStorage 快取 */
 export function readCache(): CachedData | null {
   try {
+    LEGACY_CACHE_KEYS.forEach((k) => localStorage.removeItem(k));
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
@@ -202,12 +208,12 @@ export function clearCache(): void {
  *    若上次抓取時間落在當前 6hr 視窗 [windowStart, windowEnd) 內，亦視為有效，直接使用暫存！
  * 4. 只有當「既超過 3 小時，又已跨入下一個 6hr 視窗」時，才判定過期並觸發 API！
  */
-export function isCacheValid(cache: CachedData | null, now = dayjs()): boolean {
+export function isCacheValid(cache: CachedData | null, now = twTime()): boolean {
   if (!cache || !cache.fetchedAt || !cache.cities || cache.cities.length === 0) {
     return false;
   }
 
-  const fetchedAt = dayjs(cache.fetchedAt);
+  const fetchedAt = twTime(cache.fetchedAt);
   if (!fetchedAt.isValid()) return false;
 
   // 1. Storage 時間對比：3 小時內絕對不打 API，直接使用暫存
@@ -227,7 +233,7 @@ export function isCacheValid(cache: CachedData | null, now = dayjs()): boolean {
 }
 
 /** 計算距下一個 6hr 視窗開始的毫秒數 */
-export function msUntilNextWindow(now = dayjs()): number {
+export function msUntilNextWindow(now = twTime()): number {
   const nextStart = getCurrentWindowEnd(now);
   return Math.max(nextStart.diff(now), 1000);
 }

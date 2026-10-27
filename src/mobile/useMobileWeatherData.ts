@@ -1,47 +1,15 @@
 import React, { useMemo } from "react";
-import dayjs from "dayjs";
-import ThermostatIcon from "@mui/icons-material/Thermostat";
+import { twTime } from "../utils/time";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
-import AirIcon from "@mui/icons-material/Air";
 import NavigationIcon from "@mui/icons-material/Navigation";
 import DeckIcon from "@mui/icons-material/Deck";
 import RoofingIcon from "@mui/icons-material/Roofing";
 import type { WeatherPeriod } from "../types/weather";
 import type { DayForecast, HudMetricItem, ActiveDayDetails } from "./types";
 import { useWeatherStore } from "../store/weatherStore";
+import { useActiveStation } from "../hooks/useActiveStation";
 import { computeActiveDayDetails } from "./dayDetailsHelper";
-import {
-  calculateSteadmanApparentTemp,
-  calculateIndoorApparentTemp,
-} from "../utils/weatherUtils";
-
-function getWindDegree(dir: string): number {
-  if (!dir) return 0;
-  const d = dir.trim();
-  if (d.includes("北") && d.includes("東")) return 45;
-  if (d.includes("南") && d.includes("東")) return 135;
-  if (d.includes("南") && d.includes("西")) return 225;
-  if (d.includes("北") && d.includes("西")) return 315;
-  if (d.includes("北")) return 0;
-  if (d.includes("東")) return 90;
-  if (d.includes("南")) return 180;
-  if (d.includes("西")) return 270;
-  return 0;
-}
-
-function getWindCardinal(dir: string): string {
-  if (!dir) return "--";
-  const d = dir.trim();
-  if (d.includes("北") && d.includes("東")) return "東北";
-  if (d.includes("南") && d.includes("東")) return "東南";
-  if (d.includes("南") && d.includes("西")) return "西南";
-  if (d.includes("北") && d.includes("西")) return "西北";
-  if (d.includes("北")) return "北";
-  if (d.includes("東")) return "東";
-  if (d.includes("南")) return "南";
-  if (d.includes("西")) return "西";
-  return "--";
-}
+import { computeLiveConditions, isPeriodNow } from "../utils/liveConditions";
 
 interface UseMobileWeatherDataParams {
   selectedCity: string;
@@ -50,6 +18,10 @@ interface UseMobileWeatherDataParams {
   selectedForecastDate: string;
   popStr: string;
   skyTextPrimary: string;
+}
+
+function formatTemp(v: number): string {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
 export function useMobileWeatherData({
@@ -62,32 +34,27 @@ export function useMobileWeatherData({
 }: UseMobileWeatherDataParams) {
   const weeklyForecasts = useWeatherStore((s) => s.weeklyForecasts);
   const cityWeekly = weeklyForecasts[selectedCity];
+  const { station, isCityFallback } = useActiveStation();
 
   // ── 未來 7 天預報 (優先使用 CWA 權威 1 週 7 天預報) ──
   const dailyList = useMemo(() => {
-    const today = dayjs().format("YYYY-MM-DD");
-    const tmr = dayjs().add(1, "day").format("YYYY-MM-DD");
+    const today = twTime().format("YYYY-MM-DD");
+    const tmr = twTime().add(1, "day").format("YYYY-MM-DD");
 
     if (cityWeekly && cityWeekly.length > 0) {
       // 移除今天，只保留明天起的未來 6 天預報
       const futureDays = cityWeekly.filter((day) => day.dateStr > today).slice(0, 6);
-      return futureDays.map((day) => {
+      return futureDays.map((day): DayForecast => {
         const preFix = day.dateStr === tmr ? "明天 " : "";
-        const lbl = `${preFix}${dayjs(day.dateStr).format("M/D (dd)")}`;
-        // 融合降雨機率：若 3 天逐時預報 (F-D0047-049) 中該日有提供 3 小時降雨機率，取全日最大機率進行嚴格對齊統一
+        const lbl = `${preFix}${twTime(day.dateStr).format("M/D (dd)")}`;
+        // 融合降雨機率：若 3 天逐 3 小時預報中該日有提供 3 小時降雨機率，取全日最大機率
         let fusedPop = day.maxPop;
-        if (periods.length > 0) {
-          const matchedDayPeriods = periods.filter(
-            (p) => dayjs(p.startTime).format("YYYY-MM-DD") === day.dateStr,
-          );
-          if (matchedDayPeriods.length > 0) {
-            const pops = matchedDayPeriods
-              .map((p) => parseInt(p.probabilityOfPrecipitation))
-              .filter((v) => !isNaN(v));
-            if (pops.length > 0) {
-              fusedPop = Math.max(fusedPop, ...pops);
-            }
-          }
+        const pops = periods
+          .filter((p) => twTime(p.startTime).format("YYYY-MM-DD") === day.dateStr)
+          .map((p) => parseInt(p.probabilityOfPrecipitation))
+          .filter((v) => !isNaN(v));
+        if (pops.length > 0) {
+          fusedPop = Math.max(fusedPop ?? 0, ...pops);
         }
 
         return {
@@ -101,177 +68,113 @@ export function useMobileWeatherData({
     if (!periods.length) return [];
     const groups: Record<string, WeatherPeriod[]> = {};
     periods.forEach((p) => {
-      const d = dayjs(p.startTime).format("YYYY-MM-DD");
+      const d = twTime(p.startTime).format("YYYY-MM-DD");
       if (!groups[d]) groups[d] = [];
       groups[d].push(p);
     });
 
-    const list: DayForecast[] = Object.keys(groups)
+    const list: DayForecast[] = [];
+    Object.keys(groups)
       .sort()
       .filter((d) => d > today)
       .slice(0, 6)
-      .map((d) => {
+      .forEach((d) => {
         const items = groups[d];
-        let lo = 99,
-          hi = -99,
-          popMax = 0;
-        items.forEach((p) => {
-          const lo2 =
-            parseInt(p.minTemperature) || parseInt(p.temperature) || 0;
-          const hi2 =
-            parseInt(p.maxTemperature) || parseInt(p.temperature) || 0;
-          const pv = parseInt(p.probabilityOfPrecipitation) || 0;
-          if (lo2 < lo) lo = lo2;
-          if (hi2 > hi) hi = hi2;
-          if (pv > popMax) popMax = pv;
-        });
+        const los = items.map((p) => parseFloat(p.minTemperature)).filter((v) => !isNaN(v));
+        const his = items.map((p) => parseFloat(p.maxTemperature)).filter((v) => !isNaN(v));
+        if (los.length === 0 || his.length === 0) return;
+        const pops = items.map((p) => parseInt(p.probabilityOfPrecipitation)).filter((v) => !isNaN(v));
         const lbl =
           d === tmr
-            ? "明天 " + dayjs(d).format("M/D (dd)")
-            : dayjs(d).format("M/D (dd)");
+            ? "明天 " + twTime(d).format("M/D (dd)")
+            : twTime(d).format("M/D (dd)");
         const rep =
-          items.find((p) => dayjs(p.startTime).hour() >= 11) || items[0];
-        return {
+          items.find((p) => twTime(p.startTime).hour() >= 11) || items[0];
+        list.push({
           dateStr: d,
           dayLabel: lbl,
-          minTemp: lo === 99 ? 20 : lo,
-          maxTemp: hi === -99 ? 28 : hi,
+          minTemp: Math.min(...los),
+          maxTemp: Math.max(...his),
           weather: rep.weather,
           weatherCode: rep.weatherCode,
-          maxPop: popMax,
+          maxPop: pops.length > 0 ? Math.max(...pops) : null,
           startTime: rep.startTime,
           description: rep.weatherDescription,
-        };
+        });
       });
     return list;
   }, [cityWeekly, periods]);
 
-  // ── 當日（或所選時段）全天最高溫與最低溫 ──
+  // ── 所選時段「當日」的最高溫與最低溫（今天會併入測站今日實測極值） ──
   const dayHighLow = useMemo(() => {
     if (!period) return { max: "--", min: "--" };
-    const targetDate = dayjs(period.startTime).format("YYYY-MM-DD");
+    const targetDate = twTime(period.startTime).format("YYYY-MM-DD");
+    let max: number | null = null;
+    let min: number | null = null;
 
-    const matchedDaily =
-      dailyList.find((d) => d.dateStr === targetDate) || dailyList[0];
-    if (matchedDaily && matchedDaily.maxTemp !== matchedDaily.minTemp) {
-      return {
-        max: String(matchedDaily.maxTemp),
-        min: String(matchedDaily.minTemp),
-      };
+    const weeklyDay = cityWeekly?.find((d) => d.dateStr === targetDate);
+    if (weeklyDay && weeklyDay.maxTemp > -99 && weeklyDay.minTemp < 99) {
+      max = weeklyDay.maxTemp;
+      min = weeklyDay.minTemp;
+    } else {
+      const sameDay = periods.filter(
+        (p) => twTime(p.startTime).format("YYYY-MM-DD") === targetDate,
+      );
+      const his = sameDay.map((p) => parseFloat(p.maxTemperature)).filter((v) => !isNaN(v));
+      const los = sameDay.map((p) => parseFloat(p.minTemperature)).filter((v) => !isNaN(v));
+      if (his.length > 0) max = Math.max(...his);
+      if (los.length > 0) min = Math.min(...los);
     }
 
-    const sameDayPeriods = periods.filter(
-      (p) => dayjs(p.startTime).format("YYYY-MM-DD") === targetDate,
-    );
-    if (sameDayPeriods.length > 0) {
-      const temps = sameDayPeriods
-        .map((p) => parseInt(p.temperature))
-        .filter((t) => !isNaN(t));
-      if (temps.length > 0) {
-        const max = Math.max(...temps);
-        const min = Math.min(...temps);
-        if (max !== min) {
-          return { max: String(max), min: String(min) };
-        }
-      }
+    if (targetDate === twTime().format("YYYY-MM-DD") && station) {
+      const obsHigh = parseFloat(station.dailyHigh ?? "");
+      const obsLow = parseFloat(station.dailyLow ?? "");
+      if (!isNaN(obsHigh)) max = max === null ? obsHigh : Math.max(max, obsHigh);
+      if (!isNaN(obsLow)) min = min === null ? obsLow : Math.min(min, obsLow);
     }
 
-    const nearbyTemps = periods
-      .slice(0, 8)
-      .map((p) => parseInt(p.temperature))
-      .filter((t) => !isNaN(t));
-    if (nearbyTemps.length > 0) {
-      const max = Math.max(...nearbyTemps);
-      const min = Math.min(...nearbyTemps);
-      if (max !== min) {
-        return { max: String(max), min: String(min) };
-      }
-    }
-
-    const curTemp = parseInt(period.temperature) || 24;
     return {
-      max: String(curTemp + 2),
-      min: String(curTemp - 3),
+      max: max === null ? "--" : formatTemp(max),
+      min: min === null ? "--" : formatTemp(min),
     };
-  }, [period, periods, dailyList]);
-
-  const selectedTownship = useWeatherStore((s) => s.selectedTownship);
-  const selectedPeriodTime = useWeatherStore((s) => s.selectedPeriodTime);
-  const realtimeTemps = useWeatherStore((s) => s.realtimeTemps);
-  const realtimeWinds = useWeatherStore((s) => s.realtimeWinds);
-  const realtimeWeatherMap = useWeatherStore((s) => s.realtimeWeather);
-  const townshipStations = useWeatherStore((s) => s.townshipStations);
-  const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
+  }, [period, periods, cityWeekly, station]);
 
   // ── 第一頁 4 大指標 (Cyberpunk HUD 圓形儀表) 與生活小語 ──
   const page1Data = useMemo(() => {
     if (!period) return { metrics: [], livingTip: "" };
 
-    const now = dayjs();
-    const isViewingCurrent = !selectedPeriodTime || (now.isAfter(dayjs(period.startTime)) && now.isBefore(dayjs(period.endTime)));
-    const townshipKey = selectedTownship ? `${selectedCity}_${selectedTownship}` : null;
+    const live = computeLiveConditions(period, station, {
+      isNow: isPeriodNow(period),
+      isCityFallback,
+    });
 
-    const stationsList = townshipKey && townshipStations[townshipKey] ? townshipStations[townshipKey] : [];
-    const manualStationName = townshipKey ? userSelectedStations[townshipKey] : null;
-    const activeStation = stationsList.find((st) => st.stationName === manualStationName) || (townshipKey && realtimeWeatherMap[townshipKey] ? realtimeWeatherMap[townshipKey] : null);
+    const outdoorAppTemp = parseFloat(live.outdoorApparent);
+    const indoorAppTemp = parseFloat(live.indoorApparent);
+    const outdoorPercent = isNaN(outdoorAppTemp) ? 0 : Math.min(100, Math.max(15, (outdoorAppTemp / 40) * 100));
+    const indoorPercent = isNaN(indoorAppTemp) ? 0 : Math.min(100, Math.max(15, (indoorAppTemp / 40) * 100));
+    const popVal = parseInt(popStr);
+    const hasPop = !isNaN(popVal);
 
-    const rtTemp = activeStation?.temp || (isViewingCurrent && townshipKey && realtimeTemps[townshipKey])
-      ? (activeStation?.temp || realtimeTemps[townshipKey!])
-      : (isViewingCurrent && realtimeTemps[selectedCity])
-      ? realtimeTemps[selectedCity]
-      : null;
-    const rtWind = activeStation?.wind || (isViewingCurrent && townshipKey && realtimeWinds[townshipKey])
-      ? (activeStation?.wind || realtimeWinds[townshipKey!])
-      : (isViewingCurrent && realtimeWinds[selectedCity])
-      ? realtimeWinds[selectedCity]
-      : null;
-
-    const isRainingNow = isViewingCurrent && (
-      (activeStation?.rainNow && activeStation.rainNow > 0) ||
-      (activeStation?.weather && (activeStation.weather.includes("雨") || activeStation.weather.includes("陣雨"))) ||
-      (period.weather && (period.weather.includes("雨") || period.weather.includes("陣雨")))
-    );
-
-    // 計算精準室外體感（含實測風速散熱）：依氣象署 Steadman 公式由「氣溫 + 相對濕度 + 風速」動態計算
-    const tempNum = isViewingCurrent && rtTemp ? parseFloat(rtTemp) : parseFloat(period.temperature);
-    const rhNum = parseFloat(activeStation?.humidity || period.relativeHumidity) || 65;
-    const windNum = rtWind ? parseFloat(rtWind.windSpeed) : (parseFloat(period.windSpeed) || 2);
-
-    let outdoorAppTempStr = period.maxApparentTemperature;
-    let indoorAppTempStr = period.maxApparentTemperature;
-
-    if (!isNaN(tempNum)) {
-      outdoorAppTempStr = calculateSteadmanApparentTemp(tempNum, rhNum, windNum);
-      indoorAppTempStr = calculateIndoorApparentTemp(tempNum, rhNum);
-    }
-
-    const outdoorAppTemp = Number(outdoorAppTempStr) || 20;
-    const indoorAppTemp = Number(indoorAppTempStr) || 20;
-    const outdoorPercent = Math.min(100, Math.max(15, (outdoorAppTemp / 40) * 100));
-    const indoorPercent = Math.min(100, Math.max(15, (indoorAppTemp / 40) * 100));
-    const popVal = parseInt(popStr) || 0;
-
-    const windDir = period.windDirection || "偏東風";
-    const windDirText = rtWind ? rtWind.windCardinal : getWindCardinal(windDir);
-    const windDirDeg = rtWind ? rtWind.windDegree : getWindDegree(windDir);
-
-    // 穿衣生活指南計算（依室外真實體感溫度判斷）
-    let clothTitle = "短袖輕裝";
-    let clothDetail = "純棉短袖，天氣宜人";
+    // 穿衣生活指南計算（依室外體感溫度判斷；無體感資料時退回氣溫）
+    const clothBasis = !isNaN(outdoorAppTemp) ? outdoorAppTemp : parseFloat(live.temperature);
+    let clothTitle = "--";
+    let clothDetail = "暫無溫度資料";
     let clothIcon = "👕";
-    if (outdoorAppTemp >= 30) {
+    if (isNaN(clothBasis)) {
+      // 保持無資料狀態
+    } else if (clothBasis >= 30) {
       clothTitle = "清涼透氣";
       clothDetail = "短袖為宜，注意防曬補水";
       clothIcon = "☀️";
-    } else if (outdoorAppTemp >= 25) {
+    } else if (clothBasis >= 25) {
       clothTitle = "短袖輕裝";
       clothDetail = "短袖衣物，通風舒適";
       clothIcon = "👕";
-    } else if (outdoorAppTemp >= 20) {
+    } else if (clothBasis >= 20) {
       clothTitle = "薄款外套";
       clothDetail = "薄外套或薄長袖";
       clothIcon = "🧥";
-    } else if (outdoorAppTemp >= 15) {
+    } else if (clothBasis >= 15) {
       clothTitle = "保暖衣物";
       clothDetail = "長袖毛衣或風衣保暖";
       clothIcon = "🧣";
@@ -281,23 +184,28 @@ export function useMobileWeatherData({
       clothIcon = "🧤";
     }
 
-    // 雨具提醒計算（若現場測站回報有雨，或降雨機率 >= 10% 提醒備傘，>= 40% 務必帶傘）
+    // 雨具提醒：「現場有雨」只來自測站天氣現象；預報有雨或機率 >= 40% 務必帶傘，>= 10% 建議備傘
     let umbrellaTip = "無需攜傘";
-    if (isRainingNow || popVal >= 40) {
-      umbrellaTip = isRainingNow ? "現場有雨 · 務必帶傘" : "務必攜傘";
-    } else if (popVal >= 10) {
+    if (live.isRainingObserved) {
+      umbrellaTip = "現場有雨 · 務必帶傘";
+    } else if (live.isRainForecast || (hasPop && popVal >= 40)) {
+      umbrellaTip = "預報有雨 · 務必攜傘";
+    } else if (hasPop && popVal >= 10) {
       umbrellaTip = "建議備折疊傘";
+    } else if (!hasPop) {
+      umbrellaTip = "暫無降雨機率資料";
     }
+    const rainHint = live.isRainingObserved || live.isRainForecast || (hasPop && popVal >= 10);
 
     // 整合穿衣生活指南小語
-    const livingTip = `${clothIcon} ${clothTitle} · ${clothDetail} · ${isRainingNow || popVal >= 10 ? "🌧 " : ""}${umbrellaTip}`;
+    const livingTip = `${clothIcon} ${clothTitle} · ${clothDetail} · ${rainHint ? "🌧 " : ""}${umbrellaTip}`;
 
     const metrics: HudMetricItem[] = [
       {
         key: "outdoorApparentTemp",
         label: "室外體感",
-        subLabel: "含風速散熱",
-        value: `${outdoorAppTempStr}°`,
+        subLabel: live.temperatureObserved ? "實測含風速散熱" : "預報體感",
+        value: isNaN(outdoorAppTemp) ? "--" : `${live.outdoorApparent}°`,
         percent: outdoorPercent,
         neonColor: "#FF7A00",
         neonGlow: "rgba(255, 122, 0, 0.65)",
@@ -307,7 +215,7 @@ export function useMobileWeatherData({
         key: "indoorApparentTemp",
         label: "室內體感",
         subLabel: "弱風/遮蔽環境",
-        value: `${indoorAppTempStr}°`,
+        value: isNaN(indoorAppTemp) ? "--" : `${live.indoorApparent}°`,
         percent: indoorPercent,
         neonColor: "#F59E0B",
         neonGlow: "rgba(245, 158, 11, 0.65)",
@@ -316,9 +224,9 @@ export function useMobileWeatherData({
       {
         key: "pop",
         label: "降雨",
-        subLabel: "降雨機率",
-        value: `${popStr}%`,
-        percent: Math.min(100, Math.max(5, popVal)),
+        subLabel: "本時段機率",
+        value: hasPop ? `${popVal}%` : "--",
+        percent: hasPop ? Math.min(100, Math.max(5, popVal)) : 0,
         neonColor: "#00F0FF",
         neonGlow: "rgba(0, 240, 255, 0.75)",
         miniIcon: React.createElement(WaterDropIcon, { sx: { fontSize: 18 } }),
@@ -326,15 +234,16 @@ export function useMobileWeatherData({
       {
         key: "windDirection",
         label: "風向",
-        subLabel: rtWind ? "即測風向" : "風向方位",
-        value: windDirText,
+        subLabel: live.windObserved ? "即測風向" : "預報風向",
+        value: live.windCardinal,
         percent: 85,
         neonColor: "#00FF9F",
         neonGlow: "rgba(0, 255, 159, 0.7)",
         miniIcon: React.createElement(NavigationIcon, {
           sx: {
             fontSize: 26,
-            transform: `rotate(${windDirDeg}deg)`,
+            transform: `rotate(${live.windDegree ?? 0}deg)`,
+            opacity: live.windDegree === null ? 0.35 : 1,
             filter: "drop-shadow(0 0 6px #00FF9F)",
             transition: "transform 0.4s ease",
           },
@@ -343,20 +252,9 @@ export function useMobileWeatherData({
     ];
 
     return { metrics, livingTip };
-  }, [
-    period,
-    popStr,
-    selectedPeriodTime,
-    selectedTownship,
-    selectedCity,
-    realtimeTemps,
-    realtimeWinds,
-    realtimeWeatherMap,
-    townshipStations,
-    userSelectedStations,
-  ]);
+  }, [period, popStr, station, isCityFallback]);
 
-  // ── 第二頁選中的日期（預設為今天） ──
+  // ── 第二頁選中的日期（預設為清單第一天，即明天） ──
   const activeForecastDate = useMemo(() => {
     if (
       selectedForecastDate &&
@@ -364,7 +262,7 @@ export function useMobileWeatherData({
     ) {
       return selectedForecastDate;
     }
-    return dailyList[0]?.dateStr || dayjs().format("YYYY-MM-DD");
+    return dailyList[0]?.dateStr || twTime().format("YYYY-MM-DD");
   }, [selectedForecastDate, dailyList]);
 
   // 選中日期的預報概況
@@ -382,10 +280,9 @@ export function useMobileWeatherData({
     return computeActiveDayDetails(
       activeDayForecast,
       periods,
-      period,
       skyTextPrimary,
     );
-  }, [activeDayForecast, periods, period, skyTextPrimary]);
+  }, [activeDayForecast, periods, skyTextPrimary]);
 
   const page1Metrics = page1Data.metrics;
   const livingTip = page1Data.livingTip;

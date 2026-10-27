@@ -121,16 +121,58 @@ function getClothingRecommendation(outdoorAT: number): string {
   }
 }
 
-// ── 雨具指引（依降雨機率與降雨現象判定） ──
-function getUmbrellaRecommendation(pop: number, wx: string): string {
-  const isRaining = wx.includes('雨') || wx.includes('雷');
-  if (isRaining || pop >= 40) {
-    return isRaining ? '🌧 現場有雨 · 務必帶傘' : '🌧 降雨機率高 · 務必攜傘';
-  } else if (pop >= 10) {
-    return '☂️ 局部短暫雨 · 建議備折疊傘';
-  } else {
-    return '☀️ 無需攜傘';
+// ── 雨具指引（與前端一致）：「現場有雨」只來自測站天氣現象，預報文字含雨只能說「預報有雨」 ──
+function getUmbrellaRecommendation(pop: number | null, wx: string, isRainingObserved: boolean): string {
+  if (isRainingObserved) return '🌧 現場有雨 · 務必帶傘';
+  if (wx.includes('雨') || wx.includes('雷') || (pop !== null && pop >= 40)) return '🌧 預報有雨 · 務必攜傘';
+  if (pop !== null && pop >= 10) return '☂️ 局部短暫雨 · 建議備折疊傘';
+  if (pop === null) return '暫無降雨機率資料';
+  return '☀️ 無需攜傘';
+}
+
+// ── 數值格式（與前端一致）：整數不帶小數，其餘保留 1 位；缺值顯示 "--" ──
+function fmt(v: number | null): string {
+  if (v === null || isNaN(v)) return '--';
+  return Number.isInteger(v) ? `${v}` : v.toFixed(1);
+}
+
+function toNum(v: unknown): number | null {
+  if (v === undefined || v === null || v === '' || v === '-' || v === '-99' || v === -99) return null;
+  const n = parseFloat(String(v));
+  return isNaN(n) ? null : n;
+}
+
+/** 取時間序列中「現在」所在的那一筆：時間 <= now 的最後一筆；全部都在未來時取第一筆 */
+function pickCurrentEntry(times: any[] | undefined, nowMs: number): any | undefined {
+  if (!times || times.length === 0) return undefined;
+  let current: any | undefined;
+  for (const t of times) {
+    const ts = Date.parse(t.StartTime || t.DataTime || '');
+    if (!isNaN(ts) && ts <= nowMs) current = t;
   }
+  return current ?? times[0];
+}
+
+function buildSummaryBody(p: {
+  currentT: number | null;
+  minT: number | null;
+  maxT: number | null;
+  RH: number | null;
+  V: number | null;
+  pop: number | null;
+  wx: string;
+  isRainingObserved: boolean;
+  tempLabel?: string;
+}): string {
+  const outdoorAT = p.currentT !== null && p.RH !== null && p.V !== null ? calculateSteadmanApparentTemp(p.currentT, p.RH, p.V) : null;
+  const indoorAT = p.currentT !== null && p.RH !== null ? calculateIndoorApparentTemp(p.currentT, p.RH) : null;
+  const clothBasis = outdoorAT ?? p.currentT;
+  const clothing = clothBasis !== null ? getClothingRecommendation(clothBasis) : '--（暫無溫度資料）';
+  const umbrella = getUmbrellaRecommendation(p.pop, p.wx, p.isRainingObserved);
+  const range = p.minT !== null && p.maxT !== null ? `${fmt(p.minT)}°C ~ ${fmt(p.maxT)}°C` : '--';
+  const popStr = p.pop !== null ? `${p.pop}%` : '--';
+  const wxStr = p.wx ? ` · ${p.wx}` : '';
+  return `🌡️ ${p.tempLabel ?? '當前氣溫'} ${fmt(p.currentT)}°C · 今日 ${range}\n🏠 室內體感 ${fmt(indoorAT)}°C · 🌲 室外體感 ${fmt(outdoorAT)}°C\n💧 降雨率 ${popStr}${wxStr} (${umbrella})\n👔 穿搭：${clothing}`;
 }
 
 const CITY_DATASET_MAP: Record<string, string> = {
@@ -203,29 +245,29 @@ async function fetchWeatherSummary(
           const humEl = loc.WeatherElement?.find((e: any) => e.ElementName === '相對濕度');
           const windEl = loc.WeatherElement?.find((e: any) => e.ElementName === '風速');
 
-          // 計算今日最大降雨機率 (Max 3-hour PoP，與手機端 100% 一致)
+          const nowMs = Date.now();
+
+          // 今日最大降雨機率 (Max 3-hour PoP，與前端一致)；今日已無資料時顯示 "--"，不借用明天的值
           const todayPops = (popEl?.Time || [])
             .filter((t: any) => (t.StartTime || t.DataTime || '').startsWith(todayStr))
-            .map((t: any) => parseInt(t.ElementValue?.[0]?.ProbabilityOfPrecipitation, 10))
-            .filter((v: number) => !isNaN(v));
-          const pop = todayPops.length > 0
-            ? Math.max(...todayPops)
-            : parseInt(popEl?.Time?.[0]?.ElementValue?.[0]?.ProbabilityOfPrecipitation || '0', 10);
+            .map((t: any) => toNum(t.ElementValue?.[0]?.ProbabilityOfPrecipitation))
+            .filter((v: number | null): v is number => v !== null);
+          const pop = todayPops.length > 0 ? Math.max(...todayPops) : null;
 
-          // 計算今日氣溫區間
+          // 今日氣溫區間 (今日所有逐時預報溫度)
           const todayTemps = (tempEl?.Time || [])
             .filter((t: any) => (t.StartTime || t.DataTime || '').startsWith(todayStr))
-            .map((t: any) => parseFloat(t.ElementValue?.[0]?.Temperature))
-            .filter((v: number) => !isNaN(v));
-          const minT = todayTemps.length > 0 ? Math.min(...todayTemps) : 22;
-          const maxT = todayTemps.length > 0 ? Math.max(...todayTemps) : 28;
+            .map((t: any) => toNum(t.ElementValue?.[0]?.Temperature))
+            .filter((v: number | null): v is number => v !== null);
+          const minT = todayTemps.length > 0 ? Math.min(...todayTemps) : null;
+          const maxT = todayTemps.length > 0 ? Math.max(...todayTemps) : null;
 
-          let currentT = parseFloat(tempEl?.Time?.[0]?.ElementValue?.[0]?.Temperature || '25');
-          let RH = parseFloat(humEl?.Time?.[0]?.ElementValue?.[0]?.RelativeHumidity || '65');
-          let V = parseFloat(windEl?.Time?.[0]?.ElementValue?.[0]?.WindSpeed || '2');
-          let wx = wxEl?.Time?.[0]?.ElementValue?.[0]?.Weather || '多雲';
-          let realtimeRainNow = 0;
-          let isRealtimeRaining = false;
+          // 預報值取「現在」所在的那一筆，而不是序列第一筆 (可能已是過去時間)
+          let currentT = toNum(pickCurrentEntry(tempEl?.Time, nowMs)?.ElementValue?.[0]?.Temperature);
+          let RH = toNum(pickCurrentEntry(humEl?.Time, nowMs)?.ElementValue?.[0]?.RelativeHumidity);
+          let V = toNum(pickCurrentEntry(windEl?.Time, nowMs)?.ElementValue?.[0]?.WindSpeed);
+          let wx: string = pickCurrentEntry(wxEl?.Time, nowMs)?.ElementValue?.[0]?.Weather || '';
+          let isRainingObserved = false;
 
           // 2. 若有指定測站，加碼查詢全台測站即測資料 (O-A0001-001)
           if (cleanStation) {
@@ -235,24 +277,20 @@ async function fetchWeatherSummary(
               if (stRes.ok) {
                 const stData: any = await stRes.json();
                 const st = stData.records?.Station?.[0];
-                if (st) {
-                  const airTemp = parseFloat(st.WeatherElement?.AirTemperature);
-                  if (!isNaN(airTemp) && airTemp > -50) {
-                    currentT = Math.round(airTemp * 10) / 10;
-                  }
-                  const rain = parseFloat(st.WeatherElement?.Now?.Precipitation);
-                  if (!isNaN(rain) && rain >= 0) {
-                    realtimeRainNow = rain;
-                    if (rain > 0) isRealtimeRaining = true;
-                  }
-                  const stHum = parseFloat(st.WeatherElement?.RelativeHumidity);
-                  if (!isNaN(stHum) && stHum >= 0) RH = stHum;
-                  const stWind = parseFloat(st.WeatherElement?.WindSpeed);
-                  if (!isNaN(stWind) && stWind >= 0) V = stWind;
+                const obsMs = Date.parse(st?.ObsTime?.DateTime || '');
+                // 觀測超過 90 分鐘視為過期，不當成當前實測
+                if (st && !isNaN(obsMs) && nowMs - obsMs <= 90 * 60 * 1000) {
+                  const airTemp = toNum(st.WeatherElement?.AirTemperature);
+                  if (airTemp !== null && airTemp > -50) currentT = Math.round(airTemp * 10) / 10;
+                  // 注意：Now.Precipitation 是本日累積雨量，不代表現在正在下雨，因此不用來判斷「現場有雨」
+                  const stHum = toNum(st.WeatherElement?.RelativeHumidity);
+                  if (stHum !== null && stHum >= 0 && stHum <= 100) RH = stHum;
+                  const stWind = toNum(st.WeatherElement?.WindSpeed);
+                  if (stWind !== null && stWind >= 0) V = stWind;
                   const stWeather = st.WeatherElement?.Weather;
                   if (stWeather && stWeather !== '-99' && stWeather !== 'None') {
-                    wx = stWeather.trim();
-                    if (wx.includes('雨')) isRealtimeRaining = true;
+                    wx = String(stWeather).trim();
+                    isRainingObserved = wx.includes('雨');
                   }
                 }
               }
@@ -261,22 +299,11 @@ async function fetchWeatherSummary(
             }
           }
 
-          const outdoorAT = calculateSteadmanApparentTemp(currentT, RH, V);
-          const indoorAT = calculateIndoorApparentTemp(currentT, RH);
-          const clothing = getClothingRecommendation(outdoorAT);
-          let umbrella = getUmbrellaRecommendation(pop, wx);
-          if (isRealtimeRaining) {
-            umbrella = realtimeRainNow > 0
-              ? `🌧 現場有雨 (${realtimeRainNow}mm) · 務必帶傘`
-              : '🌧 現場測站有雨 · 務必帶傘';
-          }
-
           const stationTag = cleanStation ? ` (${cleanStation}測站)` : '';
-          const currentTStr = typeof currentT === 'number' ? (Number.isInteger(currentT) ? `${currentT}` : currentT.toFixed(1)) : currentT;
 
           return {
             title: `🌅 ${cleanCity}${cleanTownship}${stationTag} 晨間氣象快報`,
-            body: `🌡️ 當前氣溫 ${currentTStr}°C · 今日 ${minT}°C ~ ${maxT}°C\n🏠 室內體感 ${indoorAT}°C · 🌲 室外體感 ${outdoorAT}°C\n💧 降雨率 ${pop}% · ${wx} (${umbrella})\n👔 穿搭：${clothing}`,
+            body: buildSummaryBody({ currentT, minT, maxT, RH, V, pop, wx, isRainingObserved }),
           };
         }
       }
@@ -294,36 +321,22 @@ async function fetchWeatherSummary(
     const loc = data.records?.Locations?.[0]?.Location?.[0];
     if (!loc) throw new Error('未取得 Location 資料');
 
-    const elMap: Record<string, string> = {};
-    for (const el of loc.WeatherElement || []) {
-      const val = el.Time?.[0]?.ElementValue?.[0];
-      if (val) {
-        if (typeof val.Temperature === 'string') elMap['T'] = val.Temperature;
-        if (typeof val.MaxTemperature === 'string') elMap['MaxT'] = val.MaxTemperature;
-        if (typeof val.MinTemperature === 'string') elMap['MinT'] = val.MinTemperature;
-        if (typeof val.RelativeHumidity === 'string') elMap['RH'] = val.RelativeHumidity;
-        if (typeof val.WindSpeed === 'string') elMap['V'] = val.WindSpeed;
-        if (typeof val.ProbabilityOfPrecipitation === 'string') elMap['PoP'] = val.ProbabilityOfPrecipitation;
-        if (typeof val.Weather === 'string') elMap['Wx'] = val.Weather;
-      }
-    }
+    // 取「現在」所在的 12 小時區塊 (而非固定第一筆)
+    const nowMs = Date.now();
+    const valOf = (name: string) =>
+      pickCurrentEntry(loc.WeatherElement?.find((e: any) => e.ElementName === name)?.Time, nowMs)?.ElementValue?.[0] ?? {};
 
-    const T = parseFloat(elMap['T'] || '26');
-    const maxT = parseFloat(elMap['MaxT'] || String(T));
-    const minT = parseFloat(elMap['MinT'] || String(T));
-    const RH = parseFloat(elMap['RH'] || '65');
-    const V = parseFloat(elMap['V'] || '2');
-    const pop = parseInt(elMap['PoP'] || '0', 10);
-    const wx = elMap['Wx'] || '多雲';
-
-    const outdoorAT = calculateSteadmanApparentTemp(T, RH, V);
-    const indoorAT = calculateIndoorApparentTemp(T, RH);
-    const clothing = getClothingRecommendation(outdoorAT);
-    const umbrella = getUmbrellaRecommendation(pop, wx);
+    const T = toNum(valOf('平均溫度').Temperature);
+    const maxT = toNum(valOf('最高溫度').MaxTemperature);
+    const minT = toNum(valOf('最低溫度').MinTemperature);
+    const RH = toNum(valOf('平均相對濕度').RelativeHumidity);
+    const V = toNum(valOf('風速').WindSpeed);
+    const pop = toNum(valOf('12小時降雨機率').ProbabilityOfPrecipitation);
+    const wx: string = valOf('天氣現象').Weather || '';
 
     return {
       title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象快報`,
-      body: `🌡️ 當前氣溫 ${T}°C · 今日 ${minT}°C ~ ${maxT}°C\n🏠 室內體感 ${indoorAT}°C · 🌲 室外體感 ${outdoorAT}°C\n💧 降雨率 ${pop}% · ${wx} (${umbrella})\n👔 穿搭：${clothing}`,
+      body: buildSummaryBody({ currentT: T, minT, maxT, RH, V, pop, wx, isRainingObserved: false, tempLabel: '時段平均氣溫' }),
     };
   } catch (err: any) {
     console.warn('[CWA F-D0047-091] fallback to F-C0032-001:', err);
@@ -337,19 +350,18 @@ async function fetchWeatherSummary(
       for (const el of loc2?.weatherElement || []) {
         elements2[el.elementName] = el.time?.[0]?.parameter?.parameterName || '';
       }
-      const minT2 = elements2.MinT ? parseFloat(elements2.MinT) : 22;
-      const maxT2 = elements2.MaxT ? parseFloat(elements2.MaxT) : 28;
-      const pop2 = elements2.PoP ? parseInt(elements2.PoP, 10) : 0;
-      const wx2 = elements2.Wx || '多雲';
-      const T2 = Math.round((minT2 * 2 + maxT2) / 3);
-      const outdoorAT2 = calculateSteadmanApparentTemp(T2, 65, 2);
-      const indoorAT2 = calculateIndoorApparentTemp(T2, 65);
-      const clothing2 = getClothingRecommendation(outdoorAT2);
-      const umbrella2 = getUmbrellaRecommendation(pop2, wx2);
+      const minT2 = toNum(elements2.MinT);
+      const maxT2 = toNum(elements2.MaxT);
+      const pop2 = toNum(elements2.PoP);
+      const wx2 = elements2.Wx || '';
+      // 36 小時預報沒有當前氣溫、濕度與風速：不推算當前溫度與體感，只提供區間與降雨資訊
+      const clothing2 = minT2 !== null ? `${getClothingRecommendation(minT2)}（依今日最低溫）` : '--（暫無溫度資料）';
+      const umbrella2 = getUmbrellaRecommendation(pop2, wx2, false);
+      const range2 = minT2 !== null && maxT2 !== null ? `${fmt(minT2)}°C ~ ${fmt(maxT2)}°C` : '--';
 
       return {
         title: `🌅 ${cleanCity}${cleanTownship} 晨間氣象快報`,
-        body: `🌡️ 當前約 ${T2}°C · 今日 ${minT2}°C ~ ${maxT2}°C\n🏠 室內體感 ${indoorAT2}°C · 🌲 室外體感 ${outdoorAT2}°C\n💧 降雨率 ${pop2}% · ${wx2} (${umbrella2})\n👔 穿搭：${clothing2}`,
+        body: `🌡️ 今日 ${range2}\n💧 降雨率 ${pop2 !== null ? `${pop2}%` : '--'}${wx2 ? ` · ${wx2}` : ''} (${umbrella2})\n👔 穿搭：${clothing2}`,
       };
     } catch {
       return {

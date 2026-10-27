@@ -6,7 +6,7 @@ import React, {
   useEffect,
 } from "react";
 import Box from "@mui/material/Box";
-import dayjs from "dayjs";
+import { twTime } from "../utils/time";
 
 import type { MobileWeatherProps } from "./types";
 import { getSkyTheme } from "./theme";
@@ -36,7 +36,7 @@ export default function MobileWeather({
   const [activePage, setActivePage] = useState(0);
   const [locationOpen, setLocationOpen] = useState(false);
   const [selectedForecastDate, setSelectedForecastDate] = useState<string>(() =>
-    dayjs().format("YYYY-MM-DD"),
+    twTime().format("YYYY-MM-DD"),
   );
 
   const period = displayPeriod || autoCurrentPeriod;
@@ -360,7 +360,7 @@ export default function MobileWeather({
             sky={sky}
             cityName={selectedCity}
             townshipName={selectedTownship}
-            currentPeriod={period}
+            periods={periods}
             onShowMessage={onShowMessage}
           />
         </Box>

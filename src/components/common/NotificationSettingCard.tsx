@@ -8,7 +8,6 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import SendIcon from "@mui/icons-material/Send";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   isNotificationSupported,
   isNotificationSubscribed,
@@ -26,15 +25,13 @@ import {
 import type { WeatherPeriod } from "../../types/weather";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import { useWeatherStore } from "../../store/weatherStore";
+import { useActiveStation } from "../../hooks/useActiveStation";
 
 interface NotificationSettingCardProps {
   cityName: string;
   townshipName: string;
-  currentPeriod: WeatherPeriod | null;
-  realtimeTemp?: string;
-  realtimeHumidity?: string;
-  realtimeWindSpeed?: string;
-  realtimeRainNow?: number;
+  /** 所選鄉鎮的完整時段清單；推播內容一律以「現在」時段與今日資料計算，與使用者選取的時段無關 */
+  periods: WeatherPeriod[];
   onShowMessage?: (msg: string) => void;
   isCyberpunkMobile?: boolean;
 }
@@ -42,11 +39,7 @@ interface NotificationSettingCardProps {
 export default function NotificationSettingCard({
   cityName,
   townshipName,
-  currentPeriod,
-  realtimeTemp,
-  realtimeHumidity,
-  realtimeWindSpeed,
-  realtimeRainNow,
+  periods,
   onShowMessage,
   isCyberpunkMobile = false,
 }: NotificationSettingCardProps) {
@@ -68,6 +61,7 @@ export default function NotificationSettingCard({
   const [syncingTime, setSyncingTime] = useState(false);
   const workerUrl = getWorkerUrl();
 
+  const { station: activeStation } = useActiveStation();
   const userSelectedStations = useWeatherStore((s) => s.userSelectedStations);
   const realtimeWeather = useWeatherStore((s) => s.realtimeWeather);
   const townshipStations = useWeatherStore((s) => s.townshipStations);
@@ -201,20 +195,9 @@ export default function NotificationSettingCard({
 
     setTesting(true);
     try {
-      const content = buildMorningNotificationContent(
-        cityName,
-        townshipName,
-        currentPeriod,
-        realtimeTemp,
-        realtimeHumidity,
-        realtimeWindSpeed,
-        realtimeRainNow,
-      );
-
       if (workerUrl) {
+        // 不傳 title / body：由 Worker 以正式排程推播的同一套算法即時產生內容，測試結果才能代表實際推播
         const res = await triggerWorkerTestPush({
-          title: content.title,
-          body: content.body,
           cityName,
           townshipName,
           stationName: currentStation,
@@ -227,6 +210,12 @@ export default function NotificationSettingCard({
           onShowMessage?.(`測試失敗: ${res.message}`);
         }
       } else {
+        const content = buildMorningNotificationContent(
+          cityName,
+          townshipName,
+          periods,
+          activeStation,
+        );
         const ok = await sendSilentNotification({
           title: content.title,
           body: content.body,

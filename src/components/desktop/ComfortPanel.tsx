@@ -6,6 +6,8 @@ import { tempColor, comfortColor, getWeatherIconUrl } from '../../utils/weatherU
 import { R } from '../../App';
 import PeriodCard from '../PeriodCard/PeriodCard';
 import DragScrollBox from '../common/DragScrollBox';
+import { useActiveStation } from '../../hooks/useActiveStation';
+import { computeLiveConditions, isPeriodNow } from '../../utils/liveConditions';
 
 function getComfortIconName(desc: string): string {
   if (desc.includes('炎熱') || desc.includes('悶熱')) return 'sun-hot';
@@ -30,6 +32,11 @@ export default function ComfortPanel({
   onSelectPeriod,
   autoCurrentPeriodStartTime,
 }: ComfortPanelProps) {
+  // 體感與濕度與總覽一致：涵蓋現在的時段用測站實測精算，其餘用預報
+  const { station, isCityFallback } = useActiveStation();
+  const live = currentPeriod
+    ? computeLiveConditions(currentPeriod, station, { isNow: isPeriodNow(currentPeriod), isCityFallback })
+    : null;
   const heroColor = currentPeriod
     ? comfortColor(currentPeriod.maxComfortIndexDescription)
     : '#66BB6A';
@@ -88,15 +95,17 @@ export default function ComfortPanel({
               {currentPeriod.maxComfortIndexDescription}
             </Typography>
             <Typography variant="body1" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              舒適度指數 {currentPeriod.minComfortIndex} – {currentPeriod.maxComfortIndex}
+              舒適度指數 {currentPeriod.minComfortIndex === currentPeriod.maxComfortIndex
+                ? currentPeriod.maxComfortIndex
+                : `${currentPeriod.minComfortIndex} – ${currentPeriod.maxComfortIndex}`}
             </Typography>
           </Box>
           <Stack spacing={0.5}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              體感溫度 <strong style={{ color: tempColor(currentPeriod.maxApparentTemperature) }}>{currentPeriod.maxApparentTemperature}°C</strong>
+              {live?.temperatureObserved ? '實測體感' : '體感溫度'} <strong style={{ color: tempColor(live?.outdoorApparent) }}>{live?.outdoorApparent}°C</strong>
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              相對濕度 <strong>{currentPeriod.relativeHumidity}%</strong>
+              相對濕度 <strong>{live?.humidity}%</strong>
             </Typography>
           </Stack>
         </Box>

@@ -63,9 +63,14 @@ export default function MobilePage1({
   const live = period
     ? computeLiveConditions(period, station, { isNow: isViewingCurrent, isCityFallback })
     : null;
-  const realtimeStationName = live?.stationName ?? null;
 
-  const displayHeroTemp = live?.temperature ?? period?.temperature;
+  // 大字氣溫一律顯示「現在」：測站實測優先，無新鮮觀測時退回當前時段預報，不跟著下方選取的時段變動
+  const nowPeriod = autoCurrentPeriod ?? period;
+  const nowLive = nowPeriod
+    ? computeLiveConditions(nowPeriod, station, { isNow: true, isCityFallback })
+    : null;
+  const displayHeroTemp = nowLive?.temperature ?? period?.temperature;
+  const realtimeStationName = nowLive?.stationName ?? null;
   // 當前時段若測站有回報天氣現象（例如：陰有雨），優先顯示測站現場實況
   const displayHeroWeather = live?.weather ?? period?.weather;
 
@@ -397,7 +402,7 @@ export default function MobilePage1({
             </Typography>
 
             {/* 即測代表站標籤 (多站時點擊可切換) */}
-            {isViewingCurrent && realtimeStationName && (
+            {realtimeStationName && (
               <Box
                 onClick={(e) => {
                   e.stopPropagation();

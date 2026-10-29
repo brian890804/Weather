@@ -60,6 +60,7 @@ export default function MobileWeather({
     selectedCity,
     periods,
     period,
+    nowPeriod: autoCurrentPeriod,
     selectedForecastDate,
     popStr,
     skyTextPrimary: sky.textPrimary,

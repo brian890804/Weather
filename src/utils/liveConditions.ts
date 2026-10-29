@@ -156,20 +156,15 @@ export function computeLiveConditions(
 
   let outdoorApparent = '-';
   let indoorApparent = '-';
+  // 室內 / 室外一律由同一組 T、RH、V 代 Steadman 公式計算，兩者才有一致的比較基準
   if (!isNaN(T) && !isNaN(RH)) {
     indoorApparent = calculateIndoorApparentTemp(T, RH);
-    if (temperatureObserved) {
-      if (!isNaN(V)) outdoorApparent = calculateSteadmanApparentTemp(T, RH, V);
-    }
+    if (!isNaN(V)) outdoorApparent = calculateSteadmanApparentTemp(T, RH, V);
   }
-  if (!temperatureObserved) {
-    // 預報時段：採用氣象署發布的體感溫度；若缺值才以同一公式由預報值計算
+  if (outdoorApparent === '-') {
+    // 缺風速等輸入時才退回氣象署發布的體感溫度
     const cwaAT = period.apparentTemperature ?? period.maxApparentTemperature;
-    if (!isNaN(toNum(cwaAT))) {
-      outdoorApparent = cwaAT as string;
-    } else if (!isNaN(T) && !isNaN(RH) && !isNaN(V)) {
-      outdoorApparent = calculateSteadmanApparentTemp(T, RH, V);
-    }
+    if (!isNaN(toNum(cwaAT))) outdoorApparent = cwaAT as string;
   }
 
   return {

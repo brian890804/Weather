@@ -15,6 +15,8 @@ interface UseMobileWeatherDataParams {
   selectedCity: string;
   periods: WeatherPeriod[];
   period: WeatherPeriod | null;
+  /** 涵蓋現在的時段：氣溫與室內 / 室外體感一律以「現在」計算，不跟著選取的時段變動 */
+  nowPeriod: WeatherPeriod | null;
   selectedForecastDate: string;
   popStr: string;
   skyTextPrimary: string;
@@ -28,6 +30,7 @@ export function useMobileWeatherData({
   selectedCity,
   periods,
   period,
+  nowPeriod,
   selectedForecastDate,
   popStr,
   skyTextPrimary,
@@ -148,15 +151,20 @@ export function useMobileWeatherData({
       isCityFallback,
     });
 
-    const outdoorAppTemp = parseFloat(live.outdoorApparent);
-    const indoorAppTemp = parseFloat(live.indoorApparent);
+    // 室內 / 室外體感與穿衣建議只看「現在」：測站實測優先，無新鮮觀測時退回當前時段預報
+    const nowLive = computeLiveConditions(nowPeriod ?? period, station, {
+      isNow: true,
+      isCityFallback,
+    });
+    const outdoorAppTemp = parseFloat(nowLive.outdoorApparent);
+    const indoorAppTemp = parseFloat(nowLive.indoorApparent);
     const outdoorPercent = isNaN(outdoorAppTemp) ? 0 : Math.min(100, Math.max(15, (outdoorAppTemp / 40) * 100));
     const indoorPercent = isNaN(indoorAppTemp) ? 0 : Math.min(100, Math.max(15, (indoorAppTemp / 40) * 100));
     const popVal = parseInt(popStr);
     const hasPop = !isNaN(popVal);
 
     // 穿衣生活指南計算（依室外體感溫度判斷；無體感資料時退回氣溫）
-    const clothBasis = !isNaN(outdoorAppTemp) ? outdoorAppTemp : parseFloat(live.temperature);
+    const clothBasis = !isNaN(outdoorAppTemp) ? outdoorAppTemp : parseFloat(nowLive.temperature);
     let clothTitle = "--";
     let clothDetail = "暫無溫度資料";
     let clothIcon = "👕";
@@ -204,8 +212,8 @@ export function useMobileWeatherData({
       {
         key: "outdoorApparentTemp",
         label: "室外體感",
-        subLabel: live.temperatureObserved ? "實測含風速散熱" : "預報體感",
-        value: isNaN(outdoorAppTemp) ? "--" : `${live.outdoorApparent}°`,
+        subLabel: nowLive.temperatureObserved ? "實測含風速散熱" : "預報體感",
+        value: isNaN(outdoorAppTemp) ? "--" : `${nowLive.outdoorApparent}°`,
         percent: outdoorPercent,
         neonColor: "#FF7A00",
         neonGlow: "rgba(255, 122, 0, 0.65)",
@@ -215,7 +223,7 @@ export function useMobileWeatherData({
         key: "indoorApparentTemp",
         label: "室內體感",
         subLabel: "弱風/遮蔽環境",
-        value: isNaN(indoorAppTemp) ? "--" : `${live.indoorApparent}°`,
+        value: isNaN(indoorAppTemp) ? "--" : `${nowLive.indoorApparent}°`,
         percent: indoorPercent,
         neonColor: "#F59E0B",
         neonGlow: "rgba(245, 158, 11, 0.65)",
@@ -252,7 +260,7 @@ export function useMobileWeatherData({
     ];
 
     return { metrics, livingTip };
-  }, [period, popStr, station, isCityFallback]);
+  }, [period, nowPeriod, popStr, station, isCityFallback]);
 
   // ── 第二頁選中的日期（預設為清單第一天，即明天） ──
   const activeForecastDate = useMemo(() => {

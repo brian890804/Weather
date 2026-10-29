@@ -162,7 +162,7 @@ function getStationScore(st: any, town: string): number {
   return score;
 }
 
-/** 拉取全台各縣市鄉鎮即測站點真實即時氣溫與風況 (O-A0001-001, 僅 1 個輕量請求，保留小數點後 1 位) */
+/** 拉取全台各縣市鄉鎮即測站點真實即時氣溫與風況 (O-A0001-001 + O-A0003-001 合併取最新，保留小數點後 1 位) */
 export async function fetchRealtimeObservations(apiKey: string): Promise<RealtimeObservationsPayload> {
   if (realtimeInFlightPromise) {
     return realtimeInFlightPromise;
@@ -170,10 +170,27 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
 
   realtimeInFlightPromise = (async () => {
     try {
-      // 呼叫全台 870+ 自動氣象站資料，耗時僅約 180ms
-      const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${apiKey}`;
-      const res = await axios.get(url, { timeout: 8000 });
-      const stations: any[] = res.data?.records?.Station ?? [];
+      // O-A0001-001：全台 870+ 測站，但約每小時才更新一次（觀測時間常落後 1 小時以上）
+      // O-A0003-001：約 360 個測站，每 10 分鐘更新
+      // 兩者同時抓取，同一測站取觀測時間較新者，確保氣溫 / 濕度 / 風速為最新實測
+      const base = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore';
+      const [hourlyRes, tenMinRes] = await Promise.allSettled([
+        axios.get(`${base}/O-A0001-001?Authorization=${apiKey}`, { timeout: 8000 }),
+        axios.get(`${base}/O-A0003-001?Authorization=${apiKey}`, { timeout: 8000 }),
+      ]);
+      if (hourlyRes.status === 'rejected' && tenMinRes.status === 'rejected') throw hourlyRes.reason;
+      const byId = new Map<string, any>();
+      for (const r of [hourlyRes, tenMinRes]) {
+        if (r.status !== 'fulfilled') continue;
+        for (const st of (r.value.data?.records?.Station ?? []) as any[]) {
+          const id = st.StationId || st.StationName;
+          const prev = byId.get(id);
+          const t = Date.parse(st.ObsTime?.DateTime ?? '');
+          const prevT = Date.parse(prev?.ObsTime?.DateTime ?? '');
+          if (!prev || (!isNaN(t) && (isNaN(prevT) || t > prevT))) byId.set(id, st);
+        }
+      }
+      const stations: any[] = [...byId.values()];
 
       const townScoreMap = new Map<string, { score: number; weatherItem: import('../types/weather').RealtimeStationWeather }>();
       const townAllStationsMap = new Map<string, import('../types/weather').RealtimeStationWeather[]>();
@@ -288,7 +305,7 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
 
       return { temps, winds, realtimeWeather, townshipStations };
     } catch (err: any) {
-      console.warn('[CWA API] 抓取即測資料 (O-A0001-001) 異常:', err?.message || err);
+      console.warn('[CWA API] 抓取即測資料 (O-A0001-001 / O-A0003-001) 異常:', err?.message || err);
       const cache = readCache();
       return {
         temps: cache?.realtimeTemps ?? {},

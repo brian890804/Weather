@@ -269,33 +269,41 @@ async function fetchWeatherSummary(
           let wx: string = pickCurrentEntry(wxEl?.Time, nowMs)?.ElementValue?.[0]?.Weather || '';
           let isRainingObserved = false;
 
-          // 2. 若有指定測站，加碼查詢全台測站即測資料 (O-A0001-001)
+          // 2. 若有指定測站，加碼查詢測站即測資料：
+          //    O-A0001-001 約每小時更新、O-A0003-001 每 10 分鐘更新，兩者都查並取觀測時間較新者
           if (cleanStation) {
             try {
-              const stUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${key}&StationName=${encodeURIComponent(cleanStation)}`;
-              const stRes = await fetch(stUrl);
-              if (stRes.ok) {
-                const stData: any = await stRes.json();
-                const st = stData.records?.Station?.[0];
-                const obsMs = Date.parse(st?.ObsTime?.DateTime || '');
-                // 觀測超過 90 分鐘視為過期，不當成當前實測
-                if (st && !isNaN(obsMs) && nowMs - obsMs <= 90 * 60 * 1000) {
-                  const airTemp = toNum(st.WeatherElement?.AirTemperature);
-                  if (airTemp !== null && airTemp > -50) currentT = Math.round(airTemp * 10) / 10;
-                  // 注意：Now.Precipitation 是本日累積雨量，不代表現在正在下雨，因此不用來判斷「現場有雨」
-                  const stHum = toNum(st.WeatherElement?.RelativeHumidity);
-                  if (stHum !== null && stHum >= 0 && stHum <= 100) RH = stHum;
-                  const stWind = toNum(st.WeatherElement?.WindSpeed);
-                  if (stWind !== null && stWind >= 0) V = stWind;
-                  const stWeather = st.WeatherElement?.Weather;
-                  if (stWeather && stWeather !== '-99' && stWeather !== 'None') {
-                    wx = String(stWeather).trim();
-                    isRainingObserved = wx.includes('雨');
-                  }
+              const stQuery = `Authorization=${key}&StationName=${encodeURIComponent(cleanStation)}`;
+              const stResults = await Promise.allSettled(
+                ['O-A0001-001', 'O-A0003-001'].map(async (id) => {
+                  const r = await fetch(`https://opendata.cwa.gov.tw/api/v1/rest/datastore/${id}?${stQuery}`);
+                  if (!r.ok) return null;
+                  const j: any = await r.json();
+                  return j.records?.Station?.[0] ?? null;
+                })
+              );
+              const st = stResults
+                .map((r) => (r.status === 'fulfilled' ? r.value : null))
+                .filter((x: any) => x && !isNaN(Date.parse(x.ObsTime?.DateTime || '')))
+                .sort((a: any, b: any) => Date.parse(b.ObsTime.DateTime) - Date.parse(a.ObsTime.DateTime))[0];
+              const obsMs = Date.parse(st?.ObsTime?.DateTime || '');
+              // 觀測超過 90 分鐘視為過期，不當成當前實測
+              if (st && !isNaN(obsMs) && nowMs - obsMs <= 90 * 60 * 1000) {
+                const airTemp = toNum(st.WeatherElement?.AirTemperature);
+                if (airTemp !== null && airTemp > -50) currentT = Math.round(airTemp * 10) / 10;
+                // 注意：Now.Precipitation 是本日累積雨量，不代表現在正在下雨，因此不用來判斷「現場有雨」
+                const stHum = toNum(st.WeatherElement?.RelativeHumidity);
+                if (stHum !== null && stHum >= 0 && stHum <= 100) RH = stHum;
+                const stWind = toNum(st.WeatherElement?.WindSpeed);
+                if (stWind !== null && stWind >= 0) V = stWind;
+                const stWeather = st.WeatherElement?.Weather;
+                if (stWeather && stWeather !== '-99' && stWeather !== 'None') {
+                  wx = String(stWeather).trim();
+                  isRainingObserved = wx.includes('雨');
                 }
               }
             } catch (stErr) {
-              console.warn('[CWA O-A0001-001] Station fetch failed:', stErr);
+              console.warn('[CWA O-A0001-001 / O-A0003-001] Station fetch failed:', stErr);
             }
           }
 

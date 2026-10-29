@@ -175,6 +175,16 @@ function buildSummaryBody(p: {
   return `🌡️ ${p.tempLabel ?? '當前氣溫'} ${fmt(p.currentT)}°C · 今日 ${range}\n🏠 室內體感 ${fmt(indoorAT)}°C · 🌲 室外體感 ${fmt(outdoorAT)}°C\n💧 降雨率 ${popStr}${wxStr} (${umbrella})\n👔 穿搭：${clothing}`;
 }
 
+function normalizeCityName(name: string | undefined): string {
+  return (name || '')
+    .trim()
+    .replace(/（.*）$/, '')
+    .replace(/^台北/, '臺北')
+    .replace(/^台中/, '臺中')
+    .replace(/^台南/, '臺南')
+    .replace(/^台東/, '臺東');
+}
+
 const CITY_DATASET_MAP: Record<string, string> = {
   '基隆市': 'F-D0047-049',
   '臺北市': 'F-D0047-061',
@@ -211,11 +221,7 @@ async function fetchWeatherSummary(
   const cleanCity = (cityName || '臺北市').trim();
   const cleanTownship = (townshipName || '').trim();
   const cleanStation = (stationName || '').trim();
-  const normCity = cleanCity
-    .replace(/^台北/, '臺北')
-    .replace(/^台中/, '臺中')
-    .replace(/^台南/, '臺南')
-    .replace(/^台東/, '臺東');
+  const normCity = normalizeCityName(cleanCity);
 
   // 計算台北當前日期字串 (YYYY-MM-DD)
   const d = new Date();
@@ -259,8 +265,8 @@ async function fetchWeatherSummary(
             .filter((t: any) => (t.StartTime || t.DataTime || '').startsWith(todayStr))
             .map((t: any) => toNum(t.ElementValue?.[0]?.Temperature))
             .filter((v: number | null): v is number => v !== null);
-          const minT = todayTemps.length > 0 ? Math.min(...todayTemps) : null;
-          const maxT = todayTemps.length > 0 ? Math.max(...todayTemps) : null;
+          let minT = todayTemps.length > 0 ? Math.min(...todayTemps) : null;
+          let maxT = todayTemps.length > 0 ? Math.max(...todayTemps) : null;
 
           // 預報值取「現在」所在的那一筆，而不是序列第一筆 (可能已是過去時間)
           let currentT = toNum(pickCurrentEntry(tempEl?.Time, nowMs)?.ElementValue?.[0]?.Temperature);
@@ -268,6 +274,8 @@ async function fetchWeatherSummary(
           let V = toNum(pickCurrentEntry(windEl?.Time, nowMs)?.ElementValue?.[0]?.WindSpeed);
           let wx: string = pickCurrentEntry(wxEl?.Time, nowMs)?.ElementValue?.[0]?.Weather || '';
           let isRainingObserved = false;
+          let isTempObserved = false;
+          let observedStationName = '';
 
           // 2. 若有指定測站，加碼查詢測站即測資料：
           //    O-A0001-001 約每小時更新、O-A0003-001 每 10 分鐘更新，兩者都查並取觀測時間較新者
@@ -279,7 +287,11 @@ async function fetchWeatherSummary(
                   const r = await fetch(`https://opendata.cwa.gov.tw/api/v1/rest/datastore/${id}?${stQuery}`);
                   if (!r.ok) return null;
                   const j: any = await r.json();
-                  return j.records?.Station?.[0] ?? null;
+                  // 站名並非全台唯一（例如臺北市「信義」與南投縣信義鄉「信義」），須以縣市 / 鄉鎮比對出正確測站
+                  const list: any[] = (j.records?.Station ?? []).filter(
+                    (x: any) => normalizeCityName(x.GeoInfo?.CountyName) === normCity
+                  );
+                  return list.find((x: any) => x.GeoInfo?.TownName === cleanTownship) ?? list[0] ?? null;
                 })
               );
               const st = stResults
@@ -290,7 +302,16 @@ async function fetchWeatherSummary(
               // 觀測超過 90 分鐘視為過期，不當成當前實測
               if (st && !isNaN(obsMs) && nowMs - obsMs <= 90 * 60 * 1000) {
                 const airTemp = toNum(st.WeatherElement?.AirTemperature);
-                if (airTemp !== null && airTemp > -50) currentT = Math.round(airTemp * 10) / 10;
+                if (airTemp !== null && airTemp > -50) {
+                  currentT = Math.round(airTemp * 10) / 10;
+                  isTempObserved = true;
+                  observedStationName = st.StationName || cleanStation;
+                }
+                // 今日區間併入測站今日實測極值（與前端一致），避免當前實測溫度落在今日區間之外
+                const obsHigh = toNum(st.WeatherElement?.DailyExtreme?.DailyHigh?.TemperatureInfo?.AirTemperature);
+                const obsLow = toNum(st.WeatherElement?.DailyExtreme?.DailyLow?.TemperatureInfo?.AirTemperature);
+                if (obsHigh !== null && obsHigh > -50) maxT = maxT === null ? obsHigh : Math.max(maxT, obsHigh);
+                if (obsLow !== null && obsLow > -50) minT = minT === null ? obsLow : Math.min(minT, obsLow);
                 // 注意：Now.Precipitation 是本日累積雨量，不代表現在正在下雨，因此不用來判斷「現場有雨」
                 const stHum = toNum(st.WeatherElement?.RelativeHumidity);
                 if (stHum !== null && stHum >= 0 && stHum <= 100) RH = stHum;
@@ -307,11 +328,16 @@ async function fetchWeatherSummary(
             }
           }
 
-          const stationTag = cleanStation ? ` (${cleanStation}測站)` : '';
+          // 只有實際採用到測站實測時才標註測站名稱
+          const stationTag = observedStationName ? ` (${observedStationName}測站)` : '';
 
           return {
             title: `🌅 ${cleanCity}${cleanTownship}${stationTag} 晨間氣象快報`,
-            body: buildSummaryBody({ currentT, minT, maxT, RH, V, pop, wx, isRainingObserved }),
+            body: buildSummaryBody({
+              currentT, minT, maxT, RH, V, pop, wx, isRainingObserved,
+              // 無新鮮測站實測時，溫度來自預報，不能標成「當前氣溫」
+              tempLabel: isTempObserved ? '當前氣溫' : '預報氣溫',
+            }),
           };
         }
       }

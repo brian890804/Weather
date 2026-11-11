@@ -167,36 +167,134 @@ function unpackData(packed: any): CachedData | null {
   };
 }
 
-/** 讀取 localStorage 快取 */
-export function readCache(): CachedData | null {
+// ── 持久化層：IndexedDB（無 localStorage 約 5MB 上限，22 縣市資料約 5MB 會寫入失敗）──
+// 記憶體保留一份鏡像，readCache / writeCache 維持同步介面；App 啟動前先以 initCache() 從 IndexedDB 載入。
+const IDB_NAME = 'weather-cache';
+const IDB_STORE = 'kv';
+
+let memCache: CachedData | null = null;
+let dbPromise: Promise<IDBDatabase | null> | null = null;
+
+function openDb(): Promise<IDBDatabase | null> {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    try {
+      if (typeof indexedDB === 'undefined') return resolve(null);
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return dbPromise;
+}
+
+function idbGet(db: IDBDatabase, key: string): Promise<unknown> {
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+function idbPut(db: IDBDatabase, key: string, value: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function toValidCache(packed: unknown): CachedData | null {
+  const unpacked = unpackData(packed);
+  if (!unpacked || !Array.isArray(unpacked.cities) || unpacked.cities.length === 0) return null;
+  return unpacked;
+}
+
+/** App 啟動時呼叫一次：從 IndexedDB 載入快取到記憶體；首次升級時自動搬移 localStorage 舊快取 */
+export async function initCache(): Promise<void> {
   try {
     LEGACY_CACHE_KEYS.forEach((k) => localStorage.removeItem(k));
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    const unpacked = unpackData(parsed);
-    if (!unpacked || !Array.isArray(unpacked.cities) || unpacked.cities.length === 0) {
-      return null;
-    }
-    return unpacked;
   } catch {
-    return null;
+    /* ignore */
+  }
+  const db = await openDb();
+  if (db) {
+    memCache = toValidCache(await idbGet(db, CACHE_KEY));
+  }
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (raw) {
+      if (!memCache) memCache = toValidCache(JSON.parse(raw));
+      if (db) {
+        if (memCache) await idbPut(db, CACHE_KEY, packData(memCache));
+        localStorage.removeItem(CACHE_KEY);
+      }
+    }
+  } catch {
+    /* ignore */
   }
 }
 
-/** 寫入 localStorage 快取 (自動精簡壓縮，防止超過 5MB Quota) */
+/** 讀取快取（記憶體鏡像） */
+export function readCache(): CachedData | null {
+  return memCache;
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 寫入快取：立即更新記憶體，並於背景寫入 IndexedDB（無 IndexedDB 時退回 localStorage） */
 export function writeCache(data: CachedData): void {
-  try {
-    const packed = packData(data);
-    localStorage.setItem(CACHE_KEY, JSON.stringify(packed));
-  } catch (err) {
-    console.warn('[Cache] LocalStorage 寫入異常:', err);
-  }
+  memCache = data;
+  if (persistTimer) clearTimeout(persistTimer);
+  // 短時間內多次寫入（如即測 + 預報同時回來）只落盤最後一次
+  persistTimer = setTimeout(async () => {
+    persistTimer = null;
+    const snapshot = memCache;
+    if (!snapshot) return;
+    const packed = packData(snapshot);
+    const db = await openDb();
+    try {
+      if (db) {
+        await idbPut(db, CACHE_KEY, packed);
+        return;
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(packed));
+    } catch (err) {
+      console.warn('[Cache] 快取寫入異常:', err);
+    }
+  }, 300);
 }
 
 /** 清除快取 */
 export function clearCache(): void {
-  localStorage.removeItem(CACHE_KEY);
+  memCache = null;
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {
+    /* ignore */
+  }
+  openDb().then((db) => {
+    if (!db) return;
+    try {
+      db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(CACHE_KEY);
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 /**

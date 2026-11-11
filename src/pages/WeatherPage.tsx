@@ -61,6 +61,7 @@ export default function WeatherPage() {
   const { isLoading, error, refetch } = useWeatherData();
   const {
     cities,
+    allCitiesLoaded,
     selectedCity,
     setSelectedCity,
     selectedTownship,
@@ -92,8 +93,9 @@ export default function WeatherPage() {
   // 定位功能：取得瀏覽器經緯度並配對全台最近行政區
   const handleLocateCurrentPosition = useCallback(async () => {
     if (locating) return;
-    if (!cities || cities.length === 0) {
-      setSnackbarMsg('正在等待氣象資料載入完成…');
+    // 比對最近鄉鎮需要全台縣市資料
+    if (!cities || cities.length === 0 || !allCitiesLoaded) {
+      setSnackbarMsg('正在載入全台氣象資料，請稍候再定位…');
       return;
     }
     setLocating(true);
@@ -114,12 +116,12 @@ export default function WeatherPage() {
     } finally {
       setLocating(false);
     }
-  }, [cities, locating, setSelectedCityAndTownship]);
+  }, [cities, allCitiesLoaded, locating, setSelectedCityAndTownship]);
 
   // 初次載入自動定位：若使用者保持「自動定位」模式，當 cities 資料載入完成後自動嘗試一次靜默定位
   const hasAutoLocatedRef = useRef(false);
   useEffect(() => {
-    if (!hasAutoLocatedRef.current && isAutoLocation && cities.length > 0) {
+    if (!hasAutoLocatedRef.current && isAutoLocation && cities.length > 0 && allCitiesLoaded) {
       hasAutoLocatedRef.current = true;
       // 進行非阻塞背景定位
       getCurrentPosition()
@@ -134,7 +136,7 @@ export default function WeatherPage() {
           // 若初次靜默定位被拒或超時，不噴惱人錯誤，保留上次儲存或預設城市
         });
     }
-  }, [cities, isAutoLocation, setSelectedCityAndTownship]);
+  }, [cities, allCitiesLoaded, isAutoLocation, setSelectedCityAndTownship]);
 
   // 倒數計時冷卻保護
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ParsedCityData, WeeklyForecastDay } from '../types/weather';
 import { autoSyncLocationIfSubscribed } from '../utils/notificationService';
+import { CITIES } from '../utils/cities';
 
 export type TabCategory = 'overview' | 'temperature' | 'wind' | 'rain' | 'comfort';
 
@@ -83,9 +84,12 @@ interface WeatherState {
   isAutoLocation: boolean;
   setIsAutoLocation: (auto: boolean) => void;
 
-  // 所有縣市資料
+  // 所有縣市資料（先載入目前縣市，其餘背景補抓）
   cities: ParsedCityData[];
   setCities: (data: ParsedCityData[]) => void;
+  // 全台縣市是否皆已載入（定位比對最近鄉鎮需要全台資料）
+  allCitiesLoaded: boolean;
+  setAllCitiesLoaded: (v: boolean) => void;
 
   // 未來 7 天預報 (以縣市名為 Key)
   weeklyForecasts: Record<string, WeeklyForecastDay[]>;
@@ -177,6 +181,12 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     const currentCity = get().selectedCity;
     const currentTownship = get().selectedTownship;
 
+    // 選取的縣市尚未載入（背景或即時補抓中）時保留選取，不要被重設成第一個縣市
+    if (!data.some((c) => c.cityName === currentCity) && CITIES.some((c) => c.name === currentCity)) {
+      set({ cities: data });
+      return;
+    }
+
     // 確保 selectedCity 存在
     const foundCity = data.find((c) => c.cityName === currentCity) || data[0];
     const newCityName = foundCity ? foundCity.cityName : '臺北市';
@@ -198,6 +208,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
     });
     triggerAutoSync(newCityName, newTownshipName, get());
   },
+
+  allCitiesLoaded: false,
+  setAllCitiesLoaded: (v) => set({ allCitiesLoaded: v }),
 
   isAutoLocation: loadSavedAutoLocation(),
   setIsAutoLocation: (auto: boolean) => {

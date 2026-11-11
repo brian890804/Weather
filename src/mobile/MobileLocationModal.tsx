@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import Box from '@mui/material/Box';
@@ -11,6 +11,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import MyLocationIcon from '@mui/icons-material/MyLocation';
 import { CITIES, REGIONS } from '../utils/cities';
 import type { ParsedCityData } from '../types/weather';
+import { ensureCityLoaded } from '../hooks/useWeatherData';
 
 interface IOSLocationModalProps {
   open: boolean;
@@ -62,6 +63,11 @@ export default function MobileLocationModal({
       setIsLocating(false);
     }
   };
+
+  // 瀏覽尚未載入的縣市時即時補抓，不必等背景全部抓完
+  useEffect(() => {
+    if (open) ensureCityLoaded(browsingCity);
+  }, [open, browsingCity]);
 
   // 取得當前瀏覽縣市的所有行政區
   const townships = useMemo(() => {

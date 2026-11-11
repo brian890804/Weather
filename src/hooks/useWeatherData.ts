@@ -321,77 +321,109 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
   return realtimeInFlightPromise;
 }
 
-/** 分批拉取 22 個縣市，避免瞬間 22 併發觸發氣象署 429 限流 */
-async function fetchAllCities(): Promise<ParsedCityData[]> {
-  const existingCache = readCache()?.cities ?? [];
-  const existingMap = new Map(existingCache.map((c) => [c.cityName, c]));
-  const apiKey = getCwaApiKey();
+/** 縣市逐 3 小時預報單檔可達 1~1.8MB，氣象署尖峰時單支常需 10 秒以上，逾時放寬到 15 秒 */
+const CITY_FETCH_TIMEOUT_MS = 15000;
 
-  // 若處於 429 冷卻保護期，且本地已有快取，直接使用快取防止連續受罰
-  if (isRateLimited() && existingCache.length > 0) {
-    console.info('[CWA API] 處於 429 限流冷卻保護中，使用本地快取資料');
-    return existingCache;
-  }
+const cityInFlight = new Map<string, Promise<ParsedCityData | null>>();
 
-  const BATCH_SIZE = 3;
-  const results: ParsedCityData[] = [];
-  let hasFailed = false;
+/** 抓取單一縣市預報（同一縣市同時只會有一個請求）；失敗時回傳本地快取，無快取則回傳 null */
+function loadCity(cityName: string): Promise<ParsedCityData | null> {
+  const existing = cityInFlight.get(cityName);
+  if (existing) return existing;
+  const city = CITIES.find((c) => c.name === cityName);
+  if (!city) return Promise.resolve(null);
 
-  for (let i = 0; i < CITIES.length; i += BATCH_SIZE) {
-    const batch = CITIES.slice(i, i + BATCH_SIZE);
-    const batchPromises = batch.map(async (city) => {
-      try {
-        const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${city.id}?Authorization=${apiKey}`;
-        const res = await axios.get<ApiResponse>(url, { timeout: 8000 });
-        return parseCityApiResponse(res.data, city.name, city.id);
-      } catch (err: any) {
-        hasFailed = true;
-        const status = err?.response?.status;
-        if (status === 429 || String(err).includes('429')) {
-          console.warn('[CWA API] 觸發氣象署 429 限流，啟動 5 分鐘冷卻保護');
-          setRateLimitCooldown(5);
-        }
-        console.warn(`[CWA API] 抓取 ${city.name} 失敗 (${status || err.message})，回退快取`);
-        // 若遭遇 429 或網路異常，優雅降級：使用該縣市本地已有的快取資料
-        const cached = existingMap.get(city.name);
-        if (cached) {
-          return cached;
-        }
-        throw err;
-      }
-    });
-
+  const promise = (async () => {
+    const cached = readCache()?.cities.find((c) => c.cityName === cityName) ?? null;
+    if (isRateLimited()) return cached;
     try {
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
-    } catch (batchErr) {
-      // 若該批次有失敗且無快取保底才中斷，若有部分成功則繼續保留
-      if (existingCache.length === 0) {
-        throw batchErr;
+      const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${city.id}?Authorization=${getCwaApiKey()}`;
+      const res = await axios.get<ApiResponse>(url, { timeout: CITY_FETCH_TIMEOUT_MS });
+      return parseCityApiResponse(res.data, city.name, city.id);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 429 || String(err).includes('429')) {
+        console.warn('[CWA API] 觸發氣象署 429 限流，啟動 5 分鐘冷卻保護');
+        setRateLimitCooldown(5);
+      }
+      console.warn(`[CWA API] 抓取 ${city.name} 失敗 (${status || err.message})，回退快取`);
+      return cached;
+    } finally {
+      cityInFlight.delete(cityName);
+    }
+  })();
+  cityInFlight.set(cityName, promise);
+  return promise;
+}
+
+/** 依 CITIES 順序合併縣市資料，updates 覆蓋 base 中同名縣市 */
+function mergeCities(base: ParsedCityData[], updates: ParsedCityData[]): ParsedCityData[] {
+  const map = new Map(base.map((c) => [c.cityName, c]));
+  updates.forEach((c) => map.set(c.cityName, c));
+  return CITIES.map((c) => map.get(c.name)).filter(Boolean) as ParsedCityData[];
+}
+
+/** 將新抓到的縣市併入 Store 與快取 */
+function commitCities(updates: ParsedCityData[]): void {
+  if (updates.length === 0) return;
+  const store = useWeatherStore.getState();
+  const cache = readCache();
+  const merged = mergeCities(store.cities.length > 0 ? store.cities : cache?.cities ?? [], updates);
+  store.setCities(merged);
+  if (cache) writeCache({ ...cache, cities: merged });
+}
+
+let backgroundCitiesPromise: Promise<void> | null = null;
+
+/** 背景分批補抓指定縣市（每批 3 個、間隔 250ms，避免觸發氣象署 429 限流），完成後一次併入 */
+function loadCitiesInBackground(names: string[]): Promise<void> {
+  if (backgroundCitiesPromise) return backgroundCitiesPromise;
+  backgroundCitiesPromise = (async () => {
+    const BATCH_SIZE = 3;
+    const rest = names;
+    const results: ParsedCityData[] = [];
+    for (let i = 0; i < rest.length; i += BATCH_SIZE) {
+      if (isRateLimited()) break;
+      const batch = await Promise.all(rest.slice(i, i + BATCH_SIZE).map((name) => loadCity(name)));
+      batch.forEach((c) => c && results.push(c));
+      if (i + BATCH_SIZE < rest.length) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
       }
     }
+    commitCities(results);
+    useWeatherStore.getState().setAllCitiesLoaded(true);
+  })().finally(() => {
+    backgroundCitiesPromise = null;
+  });
+  return backgroundCitiesPromise;
+}
 
-    // 批次間微間隔 250ms，平滑流量防止 WAF 429
-    if (i + BATCH_SIZE < CITIES.length) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
+/** 確保某縣市已載入（切換或瀏覽尚未載入的縣市時即時補抓） */
+export function ensureCityLoaded(cityName: string): void {
+  if (useWeatherStore.getState().cities.some((c) => c.cityName === cityName)) return;
+  loadCity(cityName).then((c) => {
+    if (c) commitCities([c]);
+  });
+}
+
+/**
+ * 優先只抓「目前選取的縣市」（1 個請求即可顯示），其餘 21 縣市於背景補抓。
+ * 先前一次依序抓完 22 縣市（約 15MB）需 30 秒以上才會更新畫面。
+ */
+async function fetchPriorityCities(): Promise<ParsedCityData[]> {
+  const existing = readCache()?.cities ?? [];
+  if (isRateLimited() && existing.length > 0) {
+    console.info('[CWA API] 處於 429 限流冷卻保護中，使用本地快取資料');
+    return existing;
   }
-
-  // 若部分成功或有快取，合併出完整 22 縣市資料
-  if (results.length > 0) {
-    const mergedMap = new Map(existingMap);
-    results.forEach((c) => mergedMap.set(c.cityName, c));
-    const mergedList = CITIES.map((c) => mergedMap.get(c.name)).filter(Boolean) as ParsedCityData[];
-    if (mergedList.length > 0) {
-      return mergedList;
-    }
+  const priority = useWeatherStore.getState().selectedCity;
+  const priorityCity = CITIES.some((c) => c.name === priority) ? priority : CITIES[0].name;
+  const fresh = await loadCity(priorityCity);
+  if (!fresh && existing.length === 0) {
+    throw new Error(`無法取得 ${priorityCity} 天氣預報`);
   }
-
-  if (hasFailed && existingCache.length > 0) {
-    return existingCache;
-  }
-
-  return results;
+  void loadCitiesInBackground(CITIES.map((c) => c.name).filter((n) => n !== priorityCity));
+  return mergeCities(existing, fresh ? [fresh] : []);
 }
 
 interface WeatherFetchResult {
@@ -412,10 +444,10 @@ async function fetchAllWeatherData(): Promise<WeatherFetchResult> {
   const existingStationWeather = existingCache?.realtimeWeather ?? {};
   const existingTownshipStations = existingCache?.townshipStations ?? {};
 
-  // 同步平行拉取 1 週天氣預報、全台 870+ 測站即測真實溫度與風速風向、逐 3 小時 22 縣市資料
+  // 同步平行拉取 1 週天氣預報、全台測站即測、目前縣市逐 3 小時預報（其餘縣市背景補抓）
   const weeklyPromise = fetchWeeklyForecast(apiKey);
   const realtimePromise = fetchRealtimeObservations(apiKey);
-  const cities = await fetchAllCities();
+  const cities = await fetchPriorityCities();
   const weeklyForecasts = await weeklyPromise;
   const realtimeObs = await realtimePromise;
 
@@ -467,6 +499,13 @@ export function useWeatherData() {
     const cache = readCache();
     if (cache && cache.cities && cache.cities.length > 0) {
       setCities(cache.cities);
+      // 快取已含全部縣市即可立即提供定位比對；若快取有效但缺縣市（上次背景補抓失敗），背景補齊
+      const missing = CITIES.map((c) => c.name).filter((n) => !cache.cities.some((c) => c.cityName === n));
+      if (missing.length === 0) {
+        useWeatherStore.getState().setAllCitiesLoaded(true);
+      } else if (isCacheValid(cache)) {
+        void loadCitiesInBackground(missing);
+      }
       if (cache.weeklyForecasts) {
         setWeeklyForecasts(cache.weeklyForecasts);
       }
@@ -523,6 +562,12 @@ export function useWeatherData() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** 1-1. 切換到尚未載入的縣市時即時補抓（不必等背景全部抓完） */
+  const selectedCity = useWeatherStore((s) => s.selectedCity);
+  useEffect(() => {
+    if (cities.length > 0) ensureCityLoaded(selectedCity);
+  }, [selectedCity, cities.length]);
 
   /** 2. SWR 控制資料載入：若 storage 有效則 key 為 null，0 網路請求 */
   const { data, error, isLoading, mutate } = useSWR(

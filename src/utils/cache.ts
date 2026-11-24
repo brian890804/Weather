@@ -329,9 +329,3 @@ export function isCacheValid(cache: CachedData | null, now = twTime()): boolean 
 
   return false;
 }
-
-/** 計算距下一個 6hr 視窗開始的毫秒數 */
-export function msUntilNextWindow(now = twTime()): number {
-  const nextStart = getCurrentWindowEnd(now);
-  return Math.max(nextStart.diff(now), 1000);
-}

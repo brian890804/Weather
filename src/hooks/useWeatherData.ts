@@ -9,7 +9,6 @@ import {
   readCache,
   writeCache,
   isCacheValid,
-  msUntilNextWindow,
   isRateLimited,
   setRateLimitCooldown,
 } from '../utils/cache';
@@ -84,6 +83,8 @@ export interface RealtimeObservationsPayload {
   winds: Record<string, RealtimeWindData>;
   realtimeWeather: Record<string, import('../types/weather').RealtimeStationWeather>;
   townshipStations: Record<string, import('../types/weather').RealtimeStationWeather[]>;
+  /** 抓取失敗、回傳的是本地快取時為 true */
+  fromCache?: boolean;
 }
 
 let realtimeInFlightPromise: Promise<RealtimeObservationsPayload> | null = null;
@@ -312,6 +313,7 @@ export async function fetchRealtimeObservations(apiKey: string): Promise<Realtim
         winds: cache?.realtimeWinds ?? {},
         realtimeWeather: cache?.realtimeWeather ?? {},
         townshipStations: cache?.townshipStations ?? {},
+        fromCache: true,
       };
     } finally {
       realtimeInFlightPromise = null;
@@ -478,6 +480,45 @@ function getSWRKey(): string | null {
   return 'ALL_CITIES_WEATHER_DATA';
 }
 
+export const REALTIME_REFRESH_MS = 10 * 60 * 1000;
+export const REALTIME_RETRY_MS = 60 * 1000;
+
+/**
+ * 自動更新排程（回傳停止函式）：
+ * - 頁面可見時，即測距上次成功超過 10 分鐘就重抓；失敗時至少隔 1 分鐘再重試
+ * - 每分鐘及回到前景（visibilitychange / pageshow / focus / online）時檢查；預報快取過期也一併重抓
+ * iOS PWA 在背景會暫停計時器，所以不能只靠單一長時間 setTimeout 排程
+ */
+export function startAutoRefresh(opts: {
+  refreshRealtime: () => Promise<unknown>;
+  refreshForecastIfStale: () => void;
+}): () => void {
+  let lastSuccess = Date.now();
+  let lastAttempt = 0;
+  const run = () => {
+    if (document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    if (now - lastSuccess >= REALTIME_REFRESH_MS - 1000 && now - lastAttempt >= REALTIME_RETRY_MS) {
+      lastAttempt = now;
+      opts
+        .refreshRealtime()
+        .then(() => {
+          lastSuccess = Date.now();
+        })
+        .catch(() => { /* 失敗時保留現有資料，1 分鐘後重試；由觀測時間判斷是否過期 */ });
+    }
+    opts.refreshForecastIfStale();
+  };
+  const timer = setInterval(run, REALTIME_RETRY_MS);
+  const events = ['visibilitychange', 'pageshow', 'focus', 'online'] as const;
+  const target = (e: (typeof events)[number]) => (e === 'visibilitychange' ? document : window);
+  events.forEach((e) => target(e).addEventListener(e, run));
+  return () => {
+    clearInterval(timer);
+    events.forEach((e) => target(e).removeEventListener(e, run));
+  };
+}
+
 export function useWeatherData() {
   const {
     setCities,
@@ -492,7 +533,6 @@ export function useWeatherData() {
     cities,
   } = useWeatherStore();
 
-  const pollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** 1. 初始化：優先秒讀 storage 本地快取，建立即時 UI 體驗 */
   useEffect(() => {
@@ -621,31 +661,11 @@ export function useWeatherData() {
     setError(error ? (error.message || String(error)) : null);
   }, [error, setError]);
 
-  /** 5. 6hr 定時自然喚醒排程（不使用激進的切換分頁事件，防止頻繁觸發 429） */
-  useEffect(() => {
-    function scheduleNext() {
-      const ms = msUntilNextWindow();
-      pollingTimer.current = setTimeout(() => {
-        const cache = readCache();
-        // 喚醒時再次檢查 storage 時間，只有過期才打 API
-        if (!cache || !isCacheValid(cache)) {
-          mutate();
-        }
-        scheduleNext();
-      }, ms);
-    }
-
-    scheduleNext();
-
-    return () => {
-      if (pollingTimer.current) clearTimeout(pollingTimer.current);
-    };
-  }, [mutate]);
-
   /** 6. 手動或重新整理拉取 */
   const refetchRealtime = useCallback(async () => {
     const apiKey = getCwaApiKey();
-    const { temps, winds, realtimeWeather, townshipStations } = await fetchRealtimeObservations(apiKey);
+    const { temps, winds, realtimeWeather, townshipStations, fromCache } = await fetchRealtimeObservations(apiKey);
+    if (fromCache) throw new Error('即測資料抓取失敗');
     if (temps && Object.keys(temps).length > 0) {
       setRealtimeTemps(temps);
       setRealtimeWinds(winds);
@@ -665,60 +685,64 @@ export function useWeatherData() {
     return { temps, winds, realtimeWeather, townshipStations };
   }, [setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations]);
 
+  /** 直接重抓預報並寫入快取與 Store（不經 SWR：快取有效時 SWR key 為 null，mutate() 會是空操作） */
+  const forecastInFlight = useRef<Promise<unknown> | null>(null);
+  const refreshForecast = useCallback(() => {
+    if (forecastInFlight.current) return forecastInFlight.current;
+    forecastInFlight.current = fetchAllWeatherData()
+      .then((result) => {
+        if (result && result.cities && result.cities.length > 0) {
+          const nowIso = twTime().toISOString();
+          writeCache({
+            fetchedAt: nowIso,
+            cities: result.cities,
+            weeklyForecasts: result.weeklyForecasts,
+            realtimeTemps: result.realtimeTemps,
+            realtimeWinds: result.realtimeWinds,
+            realtimeWeather: result.realtimeWeather,
+            townshipStations: result.townshipStations,
+          });
+          setCities(result.cities);
+          if (result.weeklyForecasts) setWeeklyForecasts(result.weeklyForecasts);
+          if (result.realtimeTemps) setRealtimeTemps(result.realtimeTemps);
+          if (result.realtimeWinds) setRealtimeWinds(result.realtimeWinds);
+          if (result.realtimeWeather) setRealtimeWeather(result.realtimeWeather);
+          if (result.townshipStations) setTownshipStations(result.townshipStations);
+          setLastFetchedAt(nowIso);
+        }
+        return result;
+      })
+      .finally(() => {
+        forecastInFlight.current = null;
+      });
+    return forecastInFlight.current;
+  }, [setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations, setLastFetchedAt]);
+
   const refetch = useCallback(async (force = false) => {
     setIsLoading(true);
     try {
       const rtPromise = refetchRealtime();
-      let fetchPromise: Promise<any>;
-      if (force) {
-        fetchPromise = fetchAllWeatherData().then((result) => {
-          if (result && result.cities && result.cities.length > 0) {
-            const nowIso = twTime().toISOString();
-            writeCache({
-              fetchedAt: nowIso,
-              cities: result.cities,
-              weeklyForecasts: result.weeklyForecasts,
-              realtimeTemps: result.realtimeTemps,
-              realtimeWinds: result.realtimeWinds,
-              realtimeWeather: result.realtimeWeather,
-              townshipStations: result.townshipStations,
-            });
-            setCities(result.cities);
-            if (result.weeklyForecasts) setWeeklyForecasts(result.weeklyForecasts);
-            if (result.realtimeTemps) setRealtimeTemps(result.realtimeTemps);
-            if (result.realtimeWinds) setRealtimeWinds(result.realtimeWinds);
-            if (result.realtimeWeather) setRealtimeWeather(result.realtimeWeather);
-            if (result.townshipStations) setTownshipStations(result.townshipStations);
-            setLastFetchedAt(nowIso);
-          }
-          return result;
-        });
-      } else {
-        fetchPromise = mutate();
-      }
+      const fetchPromise = force ? refreshForecast() : mutate();
       await Promise.allSettled([rtPromise, fetchPromise]);
     } finally {
       setIsLoading(false);
     }
-  }, [refetchRealtime, mutate, setCities, setWeeklyForecasts, setRealtimeTemps, setRealtimeWinds, setRealtimeWeather, setTownshipStations, setLastFetchedAt, setIsLoading]);
+  }, [refetchRealtime, refreshForecast, mutate, setIsLoading]);
 
-  /** 7. 即測資料定時更新：頁面可見時每 10 分鐘、切回前景時重抓（僅 1 個輕量請求，不觸發 22 縣市預報） */
-  useEffect(() => {
-    const REALTIME_REFRESH_MS = 10 * 60 * 1000;
-    let lastRun = Date.now();
-    const run = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRun < REALTIME_REFRESH_MS - 1000) return;
-      lastRun = Date.now();
-      refetchRealtime().catch(() => { /* 失敗時保留現有資料，由觀測時間判斷是否過期 */ });
-    };
-    const timer = setInterval(run, REALTIME_REFRESH_MS);
-    document.addEventListener('visibilitychange', run);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', run);
-    };
-  }, [refetchRealtime]);
+  /** 7. 即測每 10 分鐘更新、回到前景時補抓即測與過期預報 */
+  useEffect(
+    () =>
+      startAutoRefresh({
+        refreshRealtime: refetchRealtime,
+        refreshForecastIfStale: () => {
+          const cache = readCache();
+          if (cache && !isCacheValid(cache) && !isRateLimited()) {
+            refreshForecast().catch(() => { /* 失敗時保留快取，下次檢查（1 分鐘後）再試 */ });
+          }
+        },
+      }),
+    [refetchRealtime, refreshForecast]
+  );
 
   return { cities, isLoading, error, refetch, refetchRealtime };
 }
